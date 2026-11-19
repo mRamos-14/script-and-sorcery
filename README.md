@@ -6,8 +6,8 @@ rebuilt every time you play, so replays never repeat exactly.
 
 ## Play
 
-Open the GitHub Pages link of this repository (Settings → Pages shows it). On a phone, use
-"Add to Home Screen" so it opens like an app.
+Play at **https://mramos-14.github.io/script-and-sorcery/**. On an Android phone, open it in Chrome and use
+⋮ → **Install app** (or Add to Home screen). It then opens full-screen and works offline.
 
 ## Updates and your save
 

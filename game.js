@@ -1743,6 +1743,11 @@
     nb.focus();
   }
 
+  /* ---------------- installable app (only on the hosted build) ---------------- */
+  if (document.querySelector('meta[name="sorcery-pwa"]') && 'serviceWorker' in navigator) {
+    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => { /* plays fine online without it */ }); });
+  }
+
   /* ---------------- never freeze ---------------- */
   // If something unexpected breaks mid-step, unlock the buttons and let the player move on.
   function recover(e) {
