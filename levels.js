@@ -1,0 +1,757 @@
+/* Level content. Step types: talk, demo, predict, fill, fix, write.
+   Steps are templates. vars(R, ctx) rolls fresh values each play; strings use
+   $name or $(expression). Answers and goals are computed by running the code
+   (see engine.js), so only predict 'wrong' hints and require() rules are written by hand.
+   fill: [] marks an empty slot.  write: the player types the code.
+   goal: { foeDown } / { foeAtMost: n } for battles; output goals are automatic.
+   require(input, vars) returns a message when an answer skips the lesson.
+   tags feed the Training Grounds question pools. */
+
+const typed = lines => lines.join('\n');
+const has = (lines, re) => re.test(typed(lines));
+
+const WORLD1 = {
+  id: 1, name: 'Starter Village', topic: 'print and variables', map: 'bg-map.jpg',
+  nodes: [[50, 90], [26, 80], [68, 72], [42, 62], [25, 51], [55, 42], [76, 32], [45, 22], [50, 8]],
+  levels: [
+    {
+      id: '1-1', title: 'The silent spellbook', bg: 'village', npc: 'elder', mentor: 'elder', tags: ['print'],
+      steps: [
+        { type: 'talk', who: 'elder', text: "Welcome, {NAME}! I'm Elder Rowan. Our village spellbook has gone silent, and you're our new apprentice." },
+        { type: 'talk', who: 'elder', text: 'In this land, spells are written in Python. Every apprentice starts with print. It makes the spellbook say something.' },
+        { type: 'demo', vars: R => ({ g: R.pick(['Good morning!', 'Hello, village!', 'Wake up, sleepy town!']) }), text: 'Watch closely. Tap Run to cast this spell.', code: ['print("$g")'] },
+        { type: 'talk', who: 'elder', text: 'What goes inside the brackets appears in the spellbook. Words go inside quotes. Python calls text in quotes a string.' },
+        {
+          type: 'fill', vars: R => ({ w: R.pick(['Hello', 'Welcome', 'Greetings', 'Howdy']) }),
+          text: 'Your turn. Make the spellbook say $w.',
+          lines: ['print([])'], chips: ['"$w"', '$w'], answer: [['"$w"']],
+          hints: ['Text needs quotes around it.', 'Pick the block with quotes: "$w"'],
+        },
+        {
+          type: 'predict', vars: R => ({ w: R.pick(['Lamp on', 'Door open', 'Bell rings', 'Fire lit']) }),
+          text: 'What will the spellbook say?', code: ['print("$w")'],
+          wrong: ['"$w"', 'print("$w")'],
+          explain: "print shows the text inside the quotes. The quotes themselves don't appear.",
+        },
+        {
+          type: 'fill', vars: R => { const [a, b] = R.sample(['Ready', 'Set', 'Go!', 'Aim', 'Fire!', 'Wait'], 2); return { a, b }; },
+          text: 'Lines run from top to bottom. Make the spellbook say $a first, then $b',
+          lines: ['print([])', 'print([])'], chips: ['"$b"', '"$a"', '$a'], answer: [['"$a"', '"$b"']],
+          wrong: { '$b / $a': 'Close! But the order is backwards. Line 1 runs first.' },
+          hints: ['The first line runs first.', 'Line 1: "$a". Line 2: "$b"'],
+        },
+        { type: 'talk', who: 'elder', text: 'Now the real test. A true mage writes spells by hand. Use the keys above your keyboard for the symbols.' },
+        {
+          type: 'write', vars: R => ({ w: R.pick(['Welcome home', 'The lamp is lit', 'Spellbook awake', 'Hello, world']) }),
+          text: 'Type a spell that makes the spellbook say $w',
+          starter: [], keys: ['print', '(', ')', '"'],
+          hints: ['Start with print and a pair of brackets.', 'The words go inside quotes, inside the brackets.', 'print("$w")'],
+          solution: ['print("$w")'],
+        },
+      ],
+      learn: [
+        { title: 'print()', code: 'print("Hello")', text: 'Shows a value in the spellbook.' },
+        { title: 'Strings', code: '"any text"', text: 'Text inside quotes. The quotes tell Python it is text, not a name.' },
+      ],
+    },
+    {
+      id: '1-2', title: 'Counting coins', bg: 'village', npc: 'merchant', mentor: 'merchant', tags: ['math'],
+      steps: [
+        { type: 'talk', who: 'merchant', text: "Hey there! I'm Mira, the merchant. Let me show you number magic." },
+        { type: 'talk', who: 'merchant', text: "Numbers don't need quotes. Python can do math with them. + adds, - subtracts, * multiplies, / divides." },
+        { type: 'demo', vars: R => ({ a: R.int(2, 9), b: R.int(2, 9) }), text: 'Run this and see what happens.', code: ['print($a + $b)'] },
+        {
+          type: 'predict', vars: R => ({ a: R.int(2, 9), b: R.int(2, 9) }), text: 'Now with quotes. What will the spellbook say?', code: ['print("$a + $b")'],
+          wrong: ['$(a + b)'],
+          explain: 'With quotes it is just text, so Python shows it exactly as written. No math happens.',
+        },
+        {
+          type: 'predict', vars: R => ({ a: R.int(3, 9), b: R.int(3, 9) }), text: 'What will this one say?', code: ['print($a * $b)'],
+          wrong: ['$a$b', '$a * $b'],
+          explain: '* means multiply. $a * $b is $(a * b).',
+        },
+        {
+          type: 'fill', vars: R => { const n = R.int(3, 6); return { n, p: n + R.int(1, 4) }; },
+          text: 'I sold $n potions for $p gold each. Print the total gold.',
+          lines: ['print([] [] [])'], chips: ['$n', '$p', '"$n"', '*', '+'], answer: [['$n', '*', '$p'], ['$p', '*', '$n']],
+          wrong: { '$(String(n).repeat(p))': 'Whoa! A string times a number repeats the text. Use the number $n without quotes.', '$(n + p)': '$n + $p adds them. Each potion costs $p, so multiply.' },
+          hints: ['$n potions, $p gold each. That is multiplication.', 'print($n * $p)'],
+        },
+        {
+          type: 'predict', vars: R => { const b = R.int(2, 5); return { a: b * R.int(2, 6), b }; }, text: 'What will the spellbook say?', code: ['print($a / $b)'],
+          wrong: ['$(a / b)'],
+          explain: 'Dividing with / always gives a decimal number, called a float. So $a / $b is $(a / b).0',
+        },
+        {
+          type: 'predict', vars: R => ({ a: R.int(2, 6), b: R.int(2, 5), c: R.int(2, 5) }), text: 'Order matters. What will it say?', code: ['print($a + $b * $c)'],
+          wrong: ['$((a + b) * c)'],
+          explain: 'Like in school math, * happens before +. $b * $c is $(b * c), then $a + $(b * c) is $(a + b * c).',
+        },
+        {
+          type: 'write', vars: R => ({ a: R.int(6, 9), b: R.int(6, 9) }),
+          text: 'Type a spell that works out $a times $b and prints it. Let Python do the math!',
+          starter: [], keys: ['print', '(', ')', '*'],
+          require: (l, v) => (typed(l).includes(String(v.a * v.b)) ? `Let Python work it out. Write $a * $b instead of typing ${v.a * v.b}.`.replace(/\$a/g, v.a).replace(/\$b/g, v.b) : null),
+          hints: ['* means multiply.', 'print($a * $b)'],
+          solution: ['print($a * $b)'],
+        },
+      ],
+      learn: [
+        { title: 'Numbers', code: '7   3.5', text: 'Whole numbers are ints. Decimal numbers are floats. No quotes needed.' },
+        { title: 'Math signs', code: '2 + 3   4 * 3   10 / 2', text: '+ adds, - subtracts, * multiplies, / divides and always gives a float. * and / happen before + and -.' },
+      ],
+    },
+    {
+      id: '1-3', title: 'Labeled jars', bg: 'village', npc: 'elder', mentor: 'elder', tags: ['vars'],
+      steps: [
+        { type: 'talk', who: 'elder', text: 'Spells get messy if you repeat values everywhere. Wise mages store them in variables.' },
+        { type: 'talk', who: 'elder', text: 'A variable is like a labeled jar. Write a name, then =, then the value to put inside. Watch the jars appear under the spell.' },
+        { type: 'demo', vars: R => ({ n: R.int(5, 50) }), text: 'Run it and watch the jars.', code: ['gold = $n', 'print(gold)'] },
+        {
+          type: 'predict', vars: R => ({ j: R.pick(['gold', 'gems', 'keys', 'mana']), n: R.int(5, 50) }), text: 'What will the spellbook say?', code: ['$j = $n', 'print("$j")'],
+          wrong: ['$n', '"$j"'],
+          explain: 'In quotes, $j is just the word $j. Without quotes, Python opens the jar named $j.',
+        },
+        {
+          type: 'fill', vars: R => ({ j: R.pick(['potions', 'arrows', 'apples', 'coins']), n: R.int(2, 12) }),
+          text: 'Put $n in the $j jar, then print what is inside it.',
+          lines: ['$j = []', 'print([])'], chips: ['$n', '$j', '"$j"'], answer: [['$n', '$j']],
+          wrong: { '$j': 'That printed the word $j. Remove the quotes to open the jar.' },
+          hints: ['Line 1 fills the jar. Line 2 prints it.', '$j = $n, then print($j)'],
+        },
+        {
+          type: 'fix', vars: R => ({ j: R.pick(['herbs', 'arrows', 'stones', 'candles']), n: R.int(2, 20) }),
+          text: 'This spell crashes. Run it, then tap the broken line.',
+          code: ['$j = $n', 'print($(j[0].toUpperCase() + j.slice(1)))'], bad: 1,
+          options: ['print($j)', 'print("$(j[0].toUpperCase() + j.slice(1))")', 'print($(j[0].toUpperCase() + j.slice(1)) + $n)'], answer: 0,
+          explain: 'Names are case-sensitive. $j and $(j[0].toUpperCase() + j.slice(1)) are two different jars.',
+        },
+        {
+          type: 'predict', vars: R => ({ a: R.int(1, 9), b: R.int(10, 30) }), text: 'A jar can be refilled. What will the spellbook say?', code: ['x = $a', 'x = $b', 'print(x)'],
+          wrong: ['$a', '$a$b'],
+          explain: 'A jar holds one value at a time. Putting in $b replaced the $a.',
+        },
+        {
+          type: 'predict', vars: R => ({ a: R.int(1, 9), b: R.int(10, 30) }), text: 'Jars can be copied. What will it say?', code: ['a = $a', 'b = a', 'a = $b', 'print(b)'],
+          wrong: ['$b', 'a'],
+          explain: 'b = a copied the $a into b. Changing a later does not change b.',
+        },
+        {
+          type: 'write', vars: R => ({ j: R.pick(['coins', 'stars', 'pebbles', 'feathers']), n: R.int(5, 40) }),
+          text: 'Type it yourself: make a jar called $j holding $n, then print it.',
+          starter: [], keys: ['$j', '=', 'print', '(', ')'],
+          require: (l, v) => (new RegExp(`${v.j}\\s*=\\s*${v.n}`).test(typed(l)) && new RegExp(`print\\(\\s*${v.j}\\s*\\)`).test(typed(l)) ? null : `Store ${v.n} in a jar named ${v.j}, then print the jar.`),
+          hints: ['Two lines: first fill the jar, then print it.', '$j = $n on line 1, print($j) on line 2.'],
+          solution: ['$j = $n', 'print($j)'],
+        },
+      ],
+      learn: [
+        { title: 'Variables', code: 'gold = 10', text: 'A named jar that holds a value. Use the name without quotes to get the value back.' },
+        { title: 'Case matters', code: 'herbs ≠ Herbs', text: 'Python treats upper and lower case letters as different names.' },
+      ],
+    },
+    {
+      id: '1-4', title: 'Slime on the path', bg: 'forest', foe: R => ({ kind: 'slime', hp: R.int(18, 26) }), mentor: 'narrator', tags: [],
+      steps: [
+        { type: 'talk', who: 'narrator', text: 'A wild slime blocks the forest path! It has $HP HP. Careful: every wrong spell costs you a heart.' },
+        { type: 'talk', who: 'narrator', text: 'Battle spells use cast(spell, power). The spell flies at the enemy and deals that much damage.' },
+        { type: 'demo', vars: R => ({ p: R.int(3, 7) }), text: 'Try a small fireball first.', code: ['cast(fireball, $p)'] },
+        { type: 'talk', who: 'hero', text: 'Not enough. I need more power. Let me store it in a jar.' },
+        {
+          type: 'fill', vars: (R, c) => ({ low: Math.max(1, c.foe.hp - R.int(4, 8)) }),
+          text: 'The slime has $HP HP left. Fill the power jar and finish it off!',
+          lines: ['power = []', 'cast(fireball, [])'], chips: ['$HP', '$low', '"$HP"', 'power', '"power"'], answer: [['$HP', 'power']],
+          goal: { foeDown: true },
+          require: s => (s[1] === 'power' ? null : 'That hit hard, but use the power jar in line 2. That is the point of the jar!'),
+          hints: ['The slime has $HP HP, so power must be at least $HP.', 'Line 2 uses the jar name, without quotes.', 'power = $HP, then cast(fireball, power)'],
+        },
+        { type: 'talk', who: 'narrator', text: 'The puddle bubbles... and a bigger slime rises!' },
+        {
+          type: 'write', vars: R => { const p = R.int(8, 12), k = R.int(3, 4); return { p, k, hp: p * k }; },
+          spawn: v => ({ kind: 'slime', hp: v.hp, tint: 'big' }),
+          text: 'It has $hp HP. Type the cast line yourself: power times $k.',
+          starter: ['power = $p'], keys: ['cast', 'fireball', 'power', '*', '$k', '(', ')', ','],
+          goal: { foeDown: true },
+          require: l => (has(l, /power/) ? null : 'Use the power jar in your spell.'),
+          hints: ['power is $p, and the slime has $hp HP.', 'cast(fireball, power * $k)'],
+          solution: ['cast(fireball, power * $k)'],
+        },
+      ],
+      learn: [
+        { title: 'cast(spell, power)', code: 'cast(fireball, power)', text: 'A game spell. Values inside the brackets, separated by commas, are called arguments.' },
+      ],
+    },
+    {
+      id: '1-5', title: "The healer's hut", bg: 'village', npc: 'healer', mentor: 'healer', tags: ['update'],
+      steps: [
+        { type: 'talk', who: 'healer', text: "Oh, that slime got you! I'm Hazel, the healer. Let me teach you how to update a jar." },
+        { type: 'talk', who: 'healer', text: "hp = hp - 3 means: take what's in hp, subtract 3, then put the result back in hp." },
+        { type: 'demo', vars: R => ({ a: R.int(8, 15), b: R.int(2, 5) }), text: 'Run it and watch the hp jar change.', code: ['hp = $a', 'hp = hp - $b', 'print(hp)'] },
+        {
+          type: 'predict', vars: R => ({ a: R.int(2, 9), b: R.int(2, 9) }), text: 'What will the spellbook say?', code: ['hp = $a', 'hp = hp + $b', 'print(hp)'],
+          wrong: ['$a', '$b'],
+          explain: 'hp started at $a, then got $b more. $a + $b = $(a + b).',
+        },
+        {
+          type: 'predict', vars: R => ({ a: R.int(20, 40), b: R.int(2, 6) }), text: 'Two updates in a row. What will it say?', code: ['gold = $a', 'gold = gold - $b', 'gold = gold - $b', 'print(gold)'],
+          wrong: ['$(a - b)', '$a'],
+          explain: 'Each line runs in order. $a - $b is $(a - b), then minus $b again is $(a - 2 * b).',
+        },
+        {
+          type: 'fill', vars: R => ({ a: R.int(1, 5), h: R.int(6, 9) }),
+          text: 'Your hp is $a. A potion heals $h. Update hp, then print it.',
+          lines: ['hp = $a', 'hp = [] + []', 'print([])'], chips: ['hp', '$h', '"hp"', '$a'], answer: [['hp', '$h', 'hp']],
+          require: s => (s[0] === 'hp' || s[1] === 'hp' ? null : 'You got the number, but line 2 should use the hp jar. Then the potion works for any hp.'),
+          wrong: { hp: 'That printed the word hp. Remove the quotes to open the jar.' },
+          hints: ['The new hp is the old hp plus $h.', 'hp = hp + $h, then print(hp)'],
+        },
+        {
+          type: 'fix', vars: R => ({ a: R.int(30, 60), b: R.int(10, 30) }),
+          text: 'This spell should add $b xp but prints $a. No crash, just a sneaky bug. Run it, then tap the broken line.',
+          code: ['xp = $a', 'xp + $b', 'print(xp)'], bad: 1,
+          options: ['xp = xp + $b', 'xp = $b', 'print(xp + $b)'], answer: 0,
+          explain: 'xp + $b works out $(a + b), then throws it away. Use = to put the result back in the jar.',
+        },
+        { type: 'talk', who: 'healer', text: 'A shortcut healers love: hp += 5 means the same as hp = hp + 5. There is also -= and *=.' },
+        {
+          type: 'predict', vars: R => ({ a: R.int(5, 15), b: R.int(2, 9), c: R.int(1, 4) }), text: 'What will it say?', code: ['hp = $a', 'hp += $b', 'hp -= $c', 'print(hp)'],
+          explain: '$a + $b is $(a + b), then minus $c is $(a + b - c).',
+        },
+        {
+          type: 'write', vars: R => ({ m: R.int(3, 9), k: R.pick([2, 3]) }),
+          text: 'Multiply your mana by $k using the mana jar itself, then print it.',
+          starter: ['mana = $m'], keys: ['mana', '=', '*', '*=', '$k', 'print', '(', ')'],
+          require: l => (has(l, /mana\s*(=\s*mana|\*=)/) ? null : 'Update the jar from itself, like mana = mana * 2.'),
+          hints: ['mana = mana * $k. So does mana *= $k.', 'Then print(mana).'],
+          solution: ['mana *= $k', 'print(mana)'],
+        },
+      ],
+      learn: [
+        { title: 'Updating a variable', code: 'hp = hp + 7', text: 'Python works out the right side first, then stores the result in the jar on the left.' },
+        { title: 'Shortcuts', code: 'hp += 5   hp -= 2   hp *= 3', text: 'Update a jar in place. hp += 5 is the same as hp = hp + 5.' },
+      ],
+    },
+    {
+      id: '1-6', title: 'Hall of names', bg: 'village', npc: 'elder', mentor: 'elder', tags: ['concat', 'repeat'],
+      steps: [
+        { type: 'talk', who: 'elder', text: 'Time for string magic. The + sign also glues strings together.' },
+        { type: 'demo', text: 'Run it. It knows your name.', code: ['name = "{NAME}"', 'print("Hello, " + name)'] },
+        {
+          type: 'predict', vars: R => R.pick([{ a: 'fire', b: 'ball' }, { a: 'moon', b: 'light' }, { a: 'star', b: 'dust' }, { a: 'spell', b: 'book' }]),
+          text: 'What will the spellbook say?', code: ['print("$a" + "$b")'],
+          wrong: ['$a $b', '$a + $b'],
+          explain: '+ glues strings exactly as they are. No space is added.',
+        },
+        {
+          type: 'fill', vars: R => R.pick([{ a: 'Pixel', b: 'Mage' }, { a: 'Storm', b: 'Caller' }, { a: 'Night', b: 'Owl' }, { a: 'Iron', b: 'Wand' }]),
+          text: 'Print the full title $a $b. The space in the middle is already there.',
+          lines: ['first = "$a"', 'last = "$b"', 'print([] + " " + [])'], chips: ['first', 'last', '"first"'], answer: [['first', 'last']],
+          wrong: { 'first $b': 'With quotes, "first" is just the word first. Remove the quotes to use the jar.', '$b $a': 'Backwards! first goes before last.' },
+          hints: ['Use the two jar names, without quotes.', 'first + " " + last'],
+        },
+        {
+          type: 'predict', vars: R => ({ w: R.pick(['ha', 'ho', 'boo', 'la']), n: R.int(2, 4) }), text: 'Strings can be multiplied too. What will it say?', code: ['print("$w" * $n)'],
+          wrong: ['$w$n'],
+          explain: 'A string times a whole number repeats it.',
+        },
+        {
+          type: 'fill', vars: R => ({ g: R.pick(['Welcome, ', 'Good luck, ', 'Well met, ']) }),
+          text: 'Make the spellbook greet you by name.',
+          lines: ['name = "{NAME}"', 'print([] + [])'], chips: ['"$g"', 'name', '"name"'], answer: [['"$g"', 'name']],
+          wrong: { '$(g)name': 'That printed the word name. Remove the quotes to open the jar.' },
+          hints: ['The greeting goes first, then the name jar.', '"$g" + name'],
+        },
+        {
+          type: 'write', vars: R => R.pick([{ a: 'Ada', b: 'Lovelace' }, { a: 'Grace', b: 'Hopper' }, { a: 'Alan', b: 'Turing' }, { a: 'Guido', b: 'Rossum' }]),
+          text: 'Print the full name $a $b using both jars. A famous name in computing!',
+          starter: ['first = "$a"', 'last = "$b"'], keys: ['print', 'first', 'last', '+', '" "', '(', ')'],
+          require: l => (has(l, /first/) && has(l, /last/) ? null : 'Use both jars, first and last, instead of typing the name.'),
+          hints: ['Glue three things: first, a space, last.', 'print(first + " " + last)'],
+          solution: ['print(first + " " + last)'],
+        },
+      ],
+      learn: [
+        { title: 'Joining strings', code: '"fire" + "ball"', text: '+ glues strings together with no space. Add " " yourself when you need one.' },
+        { title: 'Repeating strings', code: '"ha" * 3', text: 'A string times a whole number repeats it.' },
+      ],
+    },
+    {
+      id: '1-7', title: 'The broken shop sign', bg: 'village', npc: 'merchant', mentor: 'merchant', tags: ['types'],
+      steps: [
+        { type: 'talk', who: 'merchant', text: '{NAME}! My shop sign spell keeps crashing. Can you take a look?' },
+        { type: 'demo', vars: R => ({ n: R.int(20, 90) }), text: 'Run the sign spell and read the red error.', code: ['gold = $n', 'print("Gold: " + gold)'] },
+        { type: 'talk', who: 'merchant', text: "Python won't glue a string and a number with +. It doesn't guess what you mean. Wrap the number in str() to turn it into a string first." },
+        {
+          type: 'fix', vars: R => ({ n: R.int(10, 99), lbl: R.pick(['Price', 'Stock', 'Weight']) }),
+          text: 'Fix the $lbl sign. Run it, then tap the broken line.',
+          code: ['amount = $n', 'print("$lbl: " + amount)'], bad: 1,
+          options: ['print("$lbl: " + str(amount))', 'print("$lbl: " + "amount")', 'print($lbl: + amount)'], answer: 0,
+          explain: 'str(amount) turns $n into "$n", so + can glue the two strings.',
+        },
+        {
+          type: 'predict', vars: R => ({ a: R.int(2, 9), b: R.int(2, 9) }), text: 'Both in quotes. What will it say?', code: ['print("$a" + "$b")'],
+          wrong: ['$(a + b)'],
+          explain: 'Both are strings, so + glues them. No math happens with strings.',
+        },
+        {
+          type: 'predict', vars: R => ({ n: R.int(10, 99) }), text: 'A shortcut. What will it say?', code: ['print("Gold:", $n)'],
+          wrong: ['Gold:$n'],
+          explain: 'print can take several values separated by commas. It puts a space between them and does not need str().',
+        },
+        {
+          type: 'predict', vars: R => ({ a: R.int(2, 9), b: R.int(1, 9) }), text: 'Going the other way. What will it say?', code: ['coins = "$(a)0"', 'print(int(coins) + $b)'],
+          wrong: ['$(a)0$b'],
+          explain: 'int() turns the text "$(a)0" into the number $(a * 10), so the math works.',
+        },
+        {
+          type: 'fill', vars: R => ({ j: R.pick(['potions', 'arrows', 'lamps']), n: R.int(2, 9) }),
+          text: 'Now fix this sign. It should say $(j[0].toUpperCase() + j.slice(1)): $n',
+          lines: ['$j = $n', 'print([] + [])'], chips: ['"$(j[0].toUpperCase() + j.slice(1)): "', 'str($j)', '$j'], answer: [['"$(j[0].toUpperCase() + j.slice(1)): "', 'str($j)']],
+          hints: ['A number needs str() before + can glue it.', '"$(j[0].toUpperCase() + j.slice(1)): " + str($j)'],
+        },
+        {
+          type: 'write', vars: R => ({ n: R.int(2, 30) }),
+          text: 'Print Level: $n using the level jar. Either way works: str() or a comma.',
+          starter: ['level = $n'], keys: ['print', '"Level: "', '"Level:"', 'str', 'level', '+', ',', '(', ')'],
+          require: l => (/level/.test(typed(l).replace(/"[^"]*"/g, '')) ? null : 'Use the level jar instead of typing the number.'),
+          hints: ['"Level: " + str(level) works. So does "Level:", level', 'print("Level: " + str(level))'],
+          solution: ['print("Level: " + str(level))'],
+        },
+      ],
+      learn: [
+        { title: 'Types', code: '"50" vs 50', text: '"50" is a str (text). 50 is an int (number). They behave differently.' },
+        { title: 'str() and int()', code: 'str(30)   int("40")', text: 'str() turns a value into text. int() turns number-looking text into a number.' },
+        { title: 'print with commas', code: 'print("Gold:", 50)', text: 'Prints each value with a space between them.' },
+      ],
+    },
+    {
+      id: '1-8', title: 'Bats at dusk', bg: 'forest', foe: R => { const m = R.int(3, 5), k = R.int(4, 6); return { kind: 'bat', hp: m * k, m, k }; }, mentor: 'narrator', tags: [],
+      steps: [
+        { type: 'talk', who: 'narrator', text: 'A giant bat swoops down! It has $HP HP.' },
+        { type: 'talk', who: 'narrator', text: 'Your spark spell needs charging. Start with a small mana value, then make it bigger before you cast.' },
+        {
+          type: 'fill', vars: (R, c) => ({ m: c.foe.m, k: c.foe.k, d: c.foe.k + R.int(1, 2) }),
+          text: 'Charge mana up to $HP, then cast spark with it.',
+          lines: ['mana = $m', 'mana = mana [] []', 'cast(spark, [])'], chips: ['*', '+', '$k', '$d', 'mana'], answer: [['*', '$k', 'mana']],
+          goal: { foeDown: true },
+          require: s => (s[2] === 'mana' ? null : 'Cast with the mana jar so your charge counts.'),
+          hints: ['$m times what makes $HP?', 'mana = mana * $k, then cast(spark, mana)'],
+        },
+        { type: 'talk', who: 'narrator', text: 'A second bat appears! A traveling mage left you a spell for it, but it crashes.' },
+        {
+          type: 'fix', vars: R => ({ n: R.int(10, 16) }), spawn: v => ({ kind: 'bat', hp: v.n }),
+          text: 'Run the spell. It crashes on line 2, but is line 2 really where the mistake is?',
+          code: ['power = "$n"', 'cast(spark, power)'], bad: 0,
+          options: ['power = $n', 'power = "twelve"', 'power = str($n)'], answer: 0,
+          goal: { foeDown: true },
+          explain: '"$n" in quotes is a string. Spells need a real number, so remove the quotes.',
+        },
+        { type: 'talk', who: 'narrator', text: 'The sky darkens. The bat queen herself arrives!' },
+        {
+          type: 'write', vars: R => { const m = R.int(4, 6), k = R.int(5, 7); return { m, k, hp: m * k }; }, spawn: v => ({ kind: 'bat', hp: v.hp, tint: 'queen' }),
+          text: 'She has $hp HP. Charge mana from $m to at least $hp, then cast spark with it. Type both lines.',
+          starter: ['mana = $m'], keys: ['mana', '=', '*', '*=', '$k', 'cast', 'spark', '(', ')', ','],
+          goal: { foeDown: true },
+          require: l => (has(l, /cast\(\s*spark\s*,\s*mana/) ? null : 'Cast spark with the mana jar: cast(spark, mana).'),
+          hints: ['$m times $k is $hp.', 'mana *= $k, then cast(spark, mana)'],
+          solution: ['mana *= $k', 'cast(spark, mana)'],
+        },
+      ],
+      learn: [
+        { title: 'Math with variables', code: 'mana = mana * 6', text: 'Jars work anywhere a value does, including math.' },
+      ],
+    },
+    {
+      id: '1-9', title: 'The Mushroom King', bg: 'grove', foe: { kind: 'king', hp: 90 }, mentor: 'narrator', boss: true, tags: [],
+      steps: [
+        { type: 'talk', who: 'king', text: 'WHO DARES WRITE SPELLS IN MY GROVE?' },
+        { type: 'talk', who: 'narrator', text: 'The Mushroom King has 90 HP. Use everything you learned in the village. Watch your hearts!' },
+        {
+          type: 'predict', measure: 'damage', vars: R => { const a = R.int(4, 6), k = R.int(3, 4); return { a, k }; },
+          text: 'First strike! How much damage will this deal?', code: ['power = $a', 'power = power * $k', 'cast(fireball, power)'],
+          wrong: ['$a', '$(a + k)'],
+          explain: 'power starts at $a, then power * $k puts $(a * k) in the jar.',
+        },
+        { type: 'talk', who: 'king', text: 'HAH! That tickled. Your next spell looks... broken.' },
+        {
+          type: 'fix', vars: R => ({ p: 20 }),
+          text: 'Your ice spell crashes. Run it, then tap the broken line.',
+          code: ['target = "Mushroom King"', 'print("Freeze, " + Target)', 'cast(icebolt, $p)'], bad: 1,
+          options: ['print("Freeze, " + target)', 'print("Freeze, " + "Target")', 'print(Freeze, + target)'], answer: 0,
+          goal: { output: 'auto' },
+          explain: 'target and Target are different names. The jar is spelled with a small t.',
+        },
+        { type: 'talk', who: 'king', text: 'GRRR! My spores will smother you!' },
+        {
+          type: 'write', vars: (R, c) => { const s = R.int(4, 6), k = Math.ceil((c.foe.hp - 20) / s); return { s, k }; },
+          text: 'Type it: put $s in a jar named stacks, then cast fireball with stacks * $k.',
+          starter: [], keys: ['stacks', '=', '$s', 'cast', 'fireball', '*', '$k', '(', ')', ','],
+          goal: { foeAtMost: 20 },
+          require: l => (has(l, /stacks\s*=/) && has(l, /cast\(\s*fireball\s*,\s*stacks/) ? null : 'Make the stacks jar first, then cast fireball with stacks times a number.'),
+          hints: ['Two lines: the jar, then the cast.', 'stacks = $s, then cast(fireball, stacks * $k)'],
+          solution: ['stacks = $s', 'cast(fireball, stacks * $k)'],
+        },
+        {
+          type: 'fill', vars: (R, c) => ({ half: Math.ceil(c.foe.hp / 2), low: Math.max(1, Math.ceil(c.foe.hp / 2) - R.int(3, 6)) }),
+          text: 'Final blow! The king has $HP HP left. Charge it up.',
+          lines: ['charge = []', 'charge = charge + charge', 'cast(fireball, [])'], chips: ['$half', '$low', 'charge', '"charge"'], answer: [['$half', 'charge']],
+          goal: { foeDown: true },
+          hints: ['Line 2 doubles whatever is in charge.', 'What doubled makes $HP?', 'charge = $half, then cast(fireball, charge)'],
+        },
+        { type: 'talk', who: 'king', text: 'Nooo... my spores... I yield, young mage. The village is safe.' },
+      ],
+      learn: [
+        { title: 'Reading errors', code: "NameError: name 'x' is not defined", text: 'The last line of an error names the problem. Read it first, then look at the line it points to.' },
+      ],
+    },
+  ],
+};
+
+const WORLD2 = {
+  id: 2, name: 'Whispering Library', topic: 'strings in depth', map: 'bg-map2.jpg',
+  nodes: [[50, 93], [28, 84], [72, 75], [28, 65], [72, 56], [28, 46], [72, 36], [32, 24], [50, 9]],
+  levels: [
+    {
+      id: '2-1', title: 'Counting letters', bg: 'library', npc: 'librarian', mentor: 'librarian', tags: ['len'],
+      steps: [
+        { type: 'talk', who: 'librarian', text: "Welcome to the Whispering Library, {NAME}. I'm Archivist Quill. Every book here is made of strings. Let's study them closely." },
+        { type: 'talk', who: 'librarian', text: 'len() counts how many characters are in a string. Letters, spaces and symbols all count.' },
+        { type: 'demo', vars: R => ({ w: R.word() }), text: 'Run it.', code: ['print(len("$w"))'] },
+        {
+          type: 'predict', vars: R => { const [a, b] = R.words(2); return { a, b }; }, text: 'Spaces count too. What will the spellbook say?', code: ['print(len("$a $b"))'],
+          wrong: ['$(a.length + b.length)'],
+          explain: 'The space counts too, so it is $(a.length) + 1 + $(b.length).',
+        },
+        {
+          type: 'predict', vars: R => ({ w: R.word() }), text: 'len() works on jars too. What will it say?', code: ['book = "$w"', 'print(len(book))'],
+          wrong: ['4', 'book'],
+          explain: 'book holds "$w", which has $(w.length) letters.',
+        },
+        {
+          type: 'fill', vars: R => ({ w: R.pick(['scroll', 'potion', 'goblin', 'raven', 'comet']) }),
+          text: 'Print how many letters are in the word $w.',
+          lines: ['word = "$w"', 'print([]([]))'], chips: ['len', 'word', '"word"', 'print'], answer: [['len', 'word']],
+          wrong: { 4: 'That counted the letters in "word" itself. Remove the quotes to use the jar.' },
+          hints: ['len goes around the jar name.', 'print(len(word))'],
+        },
+        {
+          type: 'predict', text: 'A tricky one. What will it say?', code: ['print(len(""))'],
+          wrong: ['1'],
+          explain: 'Two quotes with nothing between them make an empty string. Its length is 0.',
+        },
+        {
+          type: 'write', vars: R => ({ w: R.pick(['abracadabra', 'hocuspocus', 'alakazam', 'shazam']) }),
+          text: 'Type a spell that prints the length of "$w".',
+          starter: [], keys: ['print', 'len', '(', ')', '"$w"'],
+          require: l => (has(l, /len\(/) ? null : 'Use len() so Python does the counting.'),
+          hints: ['len() goes inside print().', 'print(len("$w"))'],
+          solution: ['print(len("$w"))'],
+        },
+      ],
+      learn: [{ title: 'len()', code: 'len("magic")', text: 'Counts the characters in a string. Spaces count too.' }],
+    },
+    {
+      id: '2-2', title: 'Shouting scrolls', bg: 'library', npc: 'librarian', mentor: 'librarian', tags: ['case'],
+      steps: [
+        { type: 'talk', who: 'librarian', text: 'Strings come with built-in tools called methods. You use them with a dot after the string, like text.upper()' },
+        { type: 'demo', vars: R => ({ w: R.word() }), text: 'Run it.', code: ['spell = "$w"', 'print(spell.upper())'] },
+        {
+          type: 'predict', vars: R => ({ w: R.word().toUpperCase() }), text: 'What will it say?', code: ['print("$w".lower())'],
+          explain: 'lower() turns every letter small.',
+        },
+        {
+          type: 'predict', vars: R => { const [a, b] = R.words(2); return { a, b }; }, text: 'What will it say?', code: ['print("the $a $b".title())'],
+          wrong: ['The $a $b'],
+          explain: 'title() capitalizes the first letter of every word.',
+        },
+        {
+          type: 'fix', vars: R => ({ w: R.pick(['silence', 'whisper', 'secret', 'shadow']) }),
+          text: 'This should print $(w.toUpperCase()) in capitals, but it prints $w. Run it, then tap the broken line.',
+          code: ['word = "$w"', 'word.upper()', 'print(word)'], bad: 1,
+          options: ['word = word.upper()', 'word.upper', 'print(word.upper)'], answer: 0,
+          explain: 'Methods give back a new string. They never change the jar, so store the result with =.',
+        },
+        {
+          type: 'fill', vars: R => R.pick([{ s: 'quiet please', want: 'upper' }, { s: 'NO RUNNING', want: 'lower' }, { s: 'the reading room', want: 'title' }]),
+          text: 'Make the sign come out as $(want === "upper" ? s.toUpperCase() : want === "lower" ? s.toLowerCase() : s.replace(/\\b\\w/g, c => c.toUpperCase()))',
+          lines: ['sign = "$s"', 'print(sign.[]())'], chips: ['upper', 'lower', 'title'], answer: [['$want']],
+          hints: ['Look at the capital letters you need.', 'print(sign.$want())'],
+        },
+        {
+          type: 'predict', vars: R => ({ w: R.pick(['hi', 'yo', 'hey']) }), text: 'Forgot the brackets! What will it say?', code: ['print("$w".upper)'],
+          explain: 'Without () the method is not run. Python shows the method itself, a strange <built-in method> message.',
+        },
+        {
+          type: 'write', text: 'Print your name in capital letters.',
+          starter: ['name = "{NAME}"'], keys: ['print', 'name', '.upper()', '(', ')'],
+          require: l => (has(l, /upper\(\)/) ? null : 'Use the upper() method.'),
+          hints: ['Put .upper() right after the jar name.', 'print(name.upper())'],
+          solution: ['print(name.upper())'],
+        },
+      ],
+      learn: [
+        { title: 'Methods', code: 'text.upper()', text: 'Tools that belong to a value. Write a dot, the method name, then brackets.' },
+        { title: 'upper, lower, title', code: '"hi".upper()   "HI".lower()', text: 'Change letter case. They return a new string and leave the original alone.' },
+      ],
+    },
+    {
+      id: '2-3', title: 'Letter by letter', bg: 'library', npc: 'scribe', mentor: 'scribe', tags: ['index'],
+      steps: [
+        { type: 'talk', who: 'scribe', text: "I'm Wren, the scribe. I copy books one letter at a time. In Python you grab one letter with square brackets." },
+        { type: 'talk', who: 'scribe', text: 'Positions start at 0, not 1! word[0] is the first letter, word[1] the second.' },
+        { type: 'demo', vars: R => ({ w: R.word() }), text: 'Run it.', code: ['word = "$w"', 'print(word[0])', 'print(word[1])'] },
+        {
+          type: 'predict', vars: R => { const w = R.pick(['dragon', 'potion', 'wizard', 'castle', 'goblin']); return { w, i: R.int(1, 4) }; },
+          text: 'What will it say?', code: ['word = "$w"', 'print(word[$i])'],
+          wrong: ['$(w[i - 1])'],
+          explain: 'Counting starts at 0, so position $i is the letter $(w[i]).',
+        },
+        {
+          type: 'predict', vars: R => ({ w: R.word() }), text: 'Negative numbers! What will it say?', code: ['word = "$w"', 'print(word[-1])'],
+          wrong: ['$(w[0])'],
+          explain: 'Negative positions count from the end. -1 is always the last letter.',
+        },
+        {
+          type: 'fill', vars: R => ({ w: R.pick(['tome', 'rune', 'ink', 'quill', 'page']) }),
+          text: 'Print the first letter of the word $w.',
+          lines: ['word = "$w"', 'print(word[[]])'], chips: ['0', '1', '"0"'], answer: [['0']],
+          wrong: { '$(w[1])': 'That is position 1. The first letter lives at position 0.' },
+          hints: ['Counting starts at 0.', 'print(word[0])'],
+        },
+        {
+          type: 'fix', vars: R => ({ w: R.pick(['ink', 'owl', 'key', 'map']) }),
+          text: 'This spell crashes. Run it, then tap the broken line.',
+          code: ['word = "$w"', 'print(word[3])'], bad: 1,
+          options: ['print(word[2])', 'print(word[-0])', 'print(word[4])'], answer: 0,
+          explain: '"$w" has 3 letters at positions 0, 1 and 2. Position 3 does not exist.',
+        },
+        {
+          type: 'write', vars: R => ({ w: R.pick(['frost', 'ember', 'storm', 'thorn']) }),
+          text: 'Print the last letter of spell.',
+          starter: ['spell = "$w"'], keys: ['print', 'spell', '[', ']', '-1', '(', ')'],
+          require: l => (has(l, /spell\[/) ? null : 'Grab the letter from the jar with spell[...]'),
+          hints: ['-1 is always the last position.', 'print(spell[-1])'],
+          solution: ['print(spell[-1])'],
+        },
+      ],
+      learn: [{ title: 'Indexing', code: 'word[0]   word[-1]', text: 'Square brackets pick one character. Positions start at 0. Negative positions count from the end.' }],
+    },
+    {
+      id: '2-4', title: 'Ink in the stacks', bg: 'stacks', foe: R => { const w = R.pick(['fireball', 'lightning', 'starfall']); return { kind: 'inkling', hp: w.length * 2 + R.int(0, w.length - 1), w }; }, mentor: 'narrator', tags: [],
+      steps: [
+        { type: 'talk', who: 'narrator', text: 'Spilled ink comes alive! An inkling blocks the aisle. It has $HP HP.' },
+        { type: 'talk', who: 'narrator', text: 'In the library, spell power comes from words. Longer words make stronger spells.' },
+        { type: 'demo', vars: (R, c) => ({ w: c.foe.w }), text: 'Cast a spell powered by a word.', code: ['cast(fireball, len("$w"))'] },
+        {
+          type: 'fill', vars: (R, c) => ({ w: c.foe.w }),
+          text: 'The inkling has $HP HP left. Double the power to finish it.',
+          lines: ['power = len("$w")', 'power = power [] []', 'cast(fireball, [])'], chips: ['*', '+', '2', 'power', '$(w.length)'], answer: [['*', '2', 'power']],
+          goal: { foeDown: true },
+          require: s => (s[2] === 'power' ? null : 'Cast with the power jar.'),
+          hints: ['len("$w") is $(w.length). Double it.', 'power = power * 2, then cast(fireball, power)'],
+        },
+        { type: 'talk', who: 'narrator', text: 'A bigger inkling oozes out of an inkwell!' },
+        {
+          type: 'write', vars: R => { const w = R.pick(['blizzard', 'snowfall', 'glacier', 'frostbite']), k = R.int(3, 4); return { w, k, hp: w.length * k - R.int(0, 2) }; },
+          spawn: v => ({ kind: 'inkling', hp: v.hp, tint: 'big' }),
+          text: 'It has $hp HP. Cast icebolt with the length of word times $k.',
+          starter: ['word = "$w"'], keys: ['cast', 'icebolt', 'len', 'word', '*', '$k', '(', ')', ','],
+          goal: { foeDown: true },
+          require: l => (has(l, /len\(/) ? null : 'Use len(word) for the power.'),
+          hints: ['len(word) is $(w.length).', 'cast(icebolt, len(word) * $k)'],
+          solution: ['cast(icebolt, len(word) * $k)'],
+        },
+      ],
+      learn: [{ title: 'Functions inside functions', code: 'cast(fireball, len(word))', text: 'Python works from the inside out. len(word) runs first, then its result goes into cast().' }],
+    },
+    {
+      id: '2-5', title: 'Torn pages', bg: 'library', npc: 'scribe', mentor: 'scribe', tags: ['slice'],
+      steps: [
+        { type: 'talk', who: 'scribe', text: 'Some pages are torn. A slice copies part of a string: word[start:stop]' },
+        { type: 'talk', who: 'scribe', text: 'The slice starts at start and stops just before stop. So word[0:3] gives positions 0, 1 and 2.' },
+        { type: 'demo', text: 'Run it.', code: ['word = "wizardry"', 'print(word[0:6])'] },
+        {
+          type: 'predict', vars: R => R.pick([{ w: 'moonlight', b: 4 }, { w: 'firestorm', b: 4 }, { w: 'starfall', b: 4 }, { w: 'icewall', b: 3 }]),
+          text: 'What will it say?', code: ['word = "$w"', 'print(word[0:$b])'],
+          explain: 'Positions 0 up to $(b - 1). The stop position $b is not included.',
+        },
+        {
+          type: 'predict', vars: R => R.pick([{ w: 'moonlight', a: 4 }, { w: 'firestorm', a: 4 }, { w: 'starfall', a: 4 }, { w: 'icewall', a: 3 }]),
+          text: 'Leaving out the stop. What will it say?', code: ['word = "$w"', 'print(word[$a:])'],
+          explain: 'Leaving out stop means go all the way to the end.',
+        },
+        {
+          type: 'fill', vars: R => R.pick([{ w: 'firestorm', p: 'fire', n: 4 }, { w: 'moonlight', p: 'moon', n: 4 }, { w: 'icewall', p: 'ice', n: 3 }, { w: 'starfall', p: 'star', n: 4 }]),
+          text: 'Copy just $p from $w.',
+          lines: ['word = "$w"', 'print(word[[]:[]])'], chips: ['0', '$n', '$(n - 1)', '$(n + 1)'], answer: [['0', '$n']],
+          wrong: { '$(p.slice(0, -1))': 'The stop is not included. To get $n letters, stop at $n.' },
+          hints: ['Start at 0. $p has $n letters.', 'word[0:$n]'],
+        },
+        {
+          type: 'predict', vars: R => ({ w: R.pick(['spellbook', 'moonstone', 'lightning']), n: R.int(3, 5) }), text: 'Leaving out the start. What will it say?', code: ['word = "$w"', 'print(word[:$n])'],
+          explain: 'Leaving out start means begin at 0.',
+        },
+        {
+          type: 'predict', vars: R => ({ w: R.pick(['stressed', 'drawer', 'reward', 'diaper']) }), text: 'A step of -1 walks backwards! What will it say?', code: ['word = "$w"', 'print(word[::-1])'],
+          explain: '[::-1] reads the whole string backwards.',
+        },
+        {
+          type: 'write', vars: R => R.pick([{ w: 'starlight', a: 4 }, { w: 'moonbeam', a: 4 }, { w: 'sunrise', a: 3 }]),
+          text: 'Print the end of the word, from position $a, using a slice.',
+          starter: ['word = "$w"'], keys: ['print', 'word', '[', ']', ':', '$a', '(', ')'],
+          require: l => (has(l, /\[[^\]]*:[^\]]*\]/) ? null : 'Use a slice with a colon, like word[4:]'),
+          hints: ['Start at $a and leave out the stop.', 'print(word[$a:])'],
+          solution: ['print(word[$a:])'],
+        },
+      ],
+      learn: [{ title: 'Slicing', code: 'word[0:4]   word[4:]   word[::-1]', text: 'Copies part of a string. Start is included, stop is not. Leave either out to go to the edge. A step of -1 reverses.' }],
+    },
+    {
+      id: '2-6', title: 'Fill-in letters', bg: 'library', npc: 'librarian', mentor: 'librarian', tags: ['fstr'],
+      steps: [
+        { type: 'talk', who: 'librarian', text: 'Gluing strings with + gets messy. An f-string lets you drop jars straight into text.' },
+        { type: 'talk', who: 'librarian', text: 'Put f before the quotes, then put a jar name in curly braces, like f"Hi {name}"' },
+        { type: 'demo', vars: R => ({ g: R.int(10, 99) }), text: 'Run it.', code: ['name = "{NAME}"', 'gold = $g', 'print(f"{name} has {gold} gold")'] },
+        {
+          type: 'predict', vars: R => ({ n: R.int(3, 40) }), text: 'What will it say?', code: ['pages = $n', 'print(f"Pages left: {pages}")'],
+          wrong: ['Pages left: {pages}'],
+          explain: 'No str() needed. The f-string turns numbers into text for you.',
+        },
+        {
+          type: 'predict', vars: R => ({ n: R.int(3, 40) }), text: 'Spot the difference. What will it say?', code: ['pages = $n', 'print("Pages left: {pages}")'],
+          wrong: ['Pages left: $n'],
+          explain: 'Without the f in front, the braces are just ordinary text.',
+        },
+        {
+          type: 'predict', vars: R => ({ a: R.int(2, 9), k: R.int(2, 4), w: R.pick(['potions', 'coins', 'gems']) }), text: 'Math inside! What will it say?', code: ['a = $a', 'print(f"{a * $k} $w")'],
+          wrong: ['a * $k $w'],
+          explain: 'You can put a whole expression inside the braces.',
+        },
+        {
+          type: 'fill', vars: R => ({ who: R.name(), n: R.int(2, 9), t: R.pick(['quills', 'candles', 'scrolls']) }),
+          text: 'Make the sign say: $who has $n $t',
+          lines: ['who = "$who"', 'n = $n', 'print([]"{[]} has {[]} $t")'], chips: ['f', 'who', 'n', '"n"'], answer: [['f', 'who', 'n']],
+          hints: ['The f goes right before the quotes.', 'print(f"{who} has {n} $t")'],
+        },
+        {
+          type: 'write', vars: R => ({ item: R.item(), price: R.int(5, 40) }),
+          text: 'Using an f-string, print: $item costs $price gold',
+          starter: ['item = "$item"', 'price = $price'], keys: ['print', 'f"', '{', '}', 'item', 'price', '"', '(', ')'],
+          require: l => (has(l, /f["']/) && has(l, /\{\s*item/) ? null : 'Use an f-string with {item} and {price} inside.'),
+          hints: ['Start with print(f"', 'print(f"{item} costs {price} gold")'],
+          solution: ['print(f"{item} costs {price} gold")'],
+        },
+      ],
+      learn: [{ title: 'f-strings', code: 'f"{name} has {gold} gold"', text: 'Put f before the quotes and jars in curly braces. Numbers are turned into text for you.' }],
+    },
+    {
+      id: '2-7', title: "The scribe's tools", bg: 'library', npc: 'scribe', mentor: 'scribe', tags: ['methods'],
+      steps: [
+        { type: 'talk', who: 'scribe', text: 'A few more tools from my desk. replace() swaps text, count() counts it, and strip() trims spaces off the ends.' },
+        { type: 'demo', vars: R => { const [a, b] = R.sample(['cat', 'owl', 'fox', 'bat'], 2); return { a, b }; }, text: 'Run it.', code: ['line = "the $a sat"', 'print(line.replace("$a", "$b"))'] },
+        {
+          type: 'predict', vars: R => R.pick([{ w: 'banana', c: 'a' }, { w: 'bookworm', c: 'o' }, { w: 'mississippi', c: 's' }, { w: 'parrot', c: 'r' }]),
+          text: 'What will it say?', code: ['print("$w".count("$c"))'],
+          explain: 'Count each "$c" in $w.',
+        },
+        {
+          type: 'predict', vars: R => ({ w: R.word() }), text: 'What will it say?', code: ['print("   $w   ".strip())'],
+          wrong: ['   $w', '$w   '],
+          explain: 'strip() removes spaces from both ends, not from the middle.',
+        },
+        {
+          type: 'fix', vars: R => R.pick([{ bad: 'lovv', good: 'love', rest: 'books' }, { bad: 'wizzard', good: 'wizard', rest: 'hat' }, { bad: 'scrol', good: 'scroll', rest: 'case' }]),
+          text: 'This should fix the typo, but the typo stays. Run it, then tap the broken line.',
+          code: ['msg = "I $bad $rest"', 'msg.replace("$bad", "$good")', 'print(msg)'], bad: 1,
+          options: ['msg = msg.replace("$bad", "$good")', 'msg.replace("$good", "$bad")', 'print(msg.replace)'], answer: 0,
+          explain: 'Like upper(), replace() gives back a new string. Store it with =.',
+        },
+        {
+          type: 'fill', vars: R => R.pick([{ w: 'bookworm', c: 'o' }, { w: 'parchment', c: 'a' }, { w: 'inkwell', c: 'l' }]),
+          text: 'Count how many times the letter $c appears in $w.',
+          lines: ['word = "$w"', 'print(word.[]([]))'], chips: ['count', 'replace', '"$c"', '$c'], answer: [['count', '"$c"']],
+          hints: ['The letter to count goes in quotes.', 'print(word.count("$c"))'],
+        },
+        {
+          type: 'write', vars: R => ({ t: R.pick(['the lost scroll', 'a map of stars', 'the silent bell']) }),
+          text: 'Trim the spaces and make it Title Case, then print it. Methods can be chained!',
+          starter: ['heading = "  $t  "'], keys: ['print', 'heading', '.strip()', '.title()', '(', ')'],
+          require: l => (has(l, /strip\(\)/) && has(l, /title\(\)/) ? null : 'Use both strip() and title().'),
+          hints: ['heading.strip() gives a string, so you can call .title() on it straight away.', 'print(heading.strip().title())'],
+          solution: ['print(heading.strip().title())'],
+        },
+      ],
+      learn: [
+        { title: 'replace, count, strip', code: 's.replace("a", "b")   s.count("a")   s.strip()', text: 'More string tools. Like all string methods, they return a new string or number.' },
+        { title: 'Chaining', code: 's.strip().title()', text: 'Each method returns a value, so you can call the next method on it.' },
+      ],
+    },
+    {
+      id: '2-8', title: 'Paper bats', bg: 'stacks', foe: R => { const w = R.pick(['spark', 'flash', 'zap']), k = R.int(5, 7); return { kind: 'paperbat', hp: w.length * k, w, k }; }, mentor: 'narrator', tags: [],
+      steps: [
+        { type: 'talk', who: 'narrator', text: 'Loose pages fold themselves into bats! A paper bat swoops in with $HP HP.' },
+        { type: 'talk', who: 'narrator', text: 'Paper bats only flinch when you shout the spell name first. Shout it in capitals, then cast.' },
+        {
+          type: 'fill', vars: (R, c) => ({ w: c.foe.w, k: c.foe.k, d: c.foe.k - 1 }),
+          text: 'Shout $(w.toUpperCase())!, then cast spark with len(word) times $k.',
+          lines: ['word = "$w"', 'print(f"{word.[]()}!")', 'cast(spark, len(word) * [])'], chips: ['upper', 'lower', '$k', '$d'], answer: [['upper', '$k']],
+          goal: { output: 'auto', foeDown: true },
+          hints: ['Capitals means upper. len("$w") is $(w.length).', 'upper, then times $k.'],
+        },
+        { type: 'talk', who: 'narrator', text: 'Another bat folds itself out of an old dictionary!' },
+        {
+          type: 'write', vars: R => { const w = R.pick(['thunderclap', 'moonlight', 'starshower']); return { w, hp: w.length * 2 - 1 }; },
+          spawn: v => ({ kind: 'paperbat', hp: v.hp }),
+          text: 'It has $hp HP. Cast spark with the length of word times 2.',
+          starter: ['word = "$w"'], keys: ['cast', 'spark', 'len', 'word', '*', '2', '(', ')', ','],
+          goal: { foeDown: true },
+          require: l => (has(l, /len\(/) ? null : 'Use len(word) for the power.'),
+          hints: ['len(word) is $(w.length).', 'cast(spark, len(word) * 2)'],
+          solution: ['cast(spark, len(word) * 2)'],
+        },
+      ],
+      learn: [{ title: 'Methods inside f-strings', code: 'f"{spell.upper()}!"', text: 'Anything that gives a value can go inside the braces, even a method call.' }],
+    },
+    {
+      id: '2-9', title: 'The Grimoire', bg: 'reading', foe: { kind: 'grimoire', hp: 90 }, mentor: 'narrator', boss: true, tags: [],
+      steps: [
+        { type: 'talk', who: 'grimoire', text: 'SSSHHH! NO SPELLS IN MY LIBRARY... unless you can read mine.' },
+        { type: 'talk', who: 'narrator', text: 'The Grimoire has 90 HP and attacks with riddles. Read every line carefully!' },
+        {
+          type: 'predict', measure: 'damage', vars: R => ({ w: R.pick(['grimoire', 'whisper', 'chapter', 'margins']), k: 3 }),
+          text: 'Riddle one. How much damage will this deal?', code: ['word = "$w"', 'power = len(word) * $k', 'cast(fireball, power)'],
+          explain: '"$w" has $(w.length) letters, and $(w.length) * $k is $(w.length * k).',
+        },
+        {
+          type: 'fix', vars: R => ({ w: R.pick(['silence', 'shelves', 'readers']) }),
+          text: 'Riddle two. Your spell crashes. Run it, then tap the broken line.',
+          code: ['riddle = "$w"', 'print(riddle[7])', 'cast(icebolt, 30)'], bad: 1,
+          options: ['print(riddle[-1])', 'print(riddle[8])', 'print(riddle["7"])'], answer: 0,
+          goal: { output: 'auto' },
+          explain: '"$w" has 7 letters at positions 0 to 6. -1 safely grabs the last one.',
+        },
+        { type: 'talk', who: 'grimoire', text: 'MY PAGES! YOU WILL NEVER FINISH THIS SENTENCE!' },
+        {
+          type: 'fill', vars: (R, c) => { const w = R.pick(['unbound', 'awake', 'free']); return { w, k: Math.ceil((c.foe.hp - 15) / w.length) }; },
+          text: 'Riddle three. Shout I am $(w.toUpperCase())! and cast spark with len(secret) times $k.',
+          lines: ['secret = "$w"', 'print(f"I am {secret.[]()}!")', 'cast(spark, len(secret) * [])'], chips: ['upper', 'title', '$k', '$(k - 1)'], answer: [['upper', '$k']],
+          goal: { output: 'auto', foeAtMost: 15 },
+          hints: ['$(w.toUpperCase()) is all capitals.', 'len("$w") is $(w.length), times $k.'],
+        },
+        {
+          type: 'write', vars: (R, c) => ({ w: R.pick(['THE END', 'FINALE', 'FIN']), }),
+          text: 'Final blow! $HP HP left. Write the finishing spell yourself, powered by len(last_word) times something.',
+          starter: ['last_word = "$w"'], keys: ['cast', 'fireball', 'len', 'last_word', '*', '(', ')', ','],
+          goal: { foeDown: true },
+          require: l => (has(l, /len\(\s*last_word\s*\)/) ? null : 'Power the spell with len(last_word).'),
+          hints: ['len(last_word) is $(w.length). The space counts if there is one!', 'cast(fireball, len(last_word) * $(Math.ceil(HP / w.length)))'],
+          solution: ['cast(fireball, len(last_word) * $(Math.ceil(HP / w.length)))'],
+        },
+        { type: 'talk', who: 'grimoire', text: '...the end. You may borrow any book you like, young mage.' },
+      ],
+      learn: [{ title: 'String toolkit', code: 'len(s)  s[0]  s[1:4]  s.upper()  f"{s}"', text: 'Everything from World 2 in one line. Strings can be measured, picked apart, changed and filled in.' }],
+    },
+  ],
+};
+
+const WORLDS = [WORLD1, WORLD2];

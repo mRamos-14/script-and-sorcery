@@ -1,0 +1,7 @@
+# full-size art originals and concept sketches (the game uses the compressed JPGs)
+assets/raw/
+assets/concepts/
+_site/
+__pycache__/
+*.pyc
+.DS_Store
