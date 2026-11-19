@@ -55,6 +55,39 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--gold); outl
 .confirm { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 15px; justify-content: center; }
 .confirm .btn { font-size: 15px; padding: 8px 12px 10px; }
 .install-hint { color: var(--text); text-align: center; }
+.menu-hero { display: flex; gap: 12px; align-items: center; }
+#menu-portrait { width: 56px; height: 56px; image-rendering: pixelated; background: #1b1530; border-radius: 4px; box-shadow: 0 0 0 2px var(--edge-dark); flex: none; }
+.menu-hero-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.menu-hero-name { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; font-size: 18px; }
+#menu-lv { color: var(--gold); font-size: 15px; }
+.menu-rank { font-size: 14px; color: var(--muted); }
+.menu-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.menu-blurb { text-align: center; }
+.set-group { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.set-group h3 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 11px; color: var(--gold); }
+.set-toggle { display: flex; justify-content: space-between; align-items: center; background: var(--panel-2); border: 0; border-radius: 4px; padding: 12px; color: var(--text); font: inherit; font-size: 17px; box-shadow: 0 0 0 2px var(--edge-dark); }
+.set-toggle i { width: 44px; height: 24px; border-radius: 12px; background: #3a3150; position: relative; flex: none; }
+.set-toggle i::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--muted); transition: left .15s; }
+.set-toggle[aria-checked="true"] i { background: var(--ok); }
+.set-toggle[aria-checked="true"] i::after { left: 23px; background: #fff; }
+.set-slider { display: flex; flex-direction: column; gap: 4px; font-size: 15px; color: var(--muted); padding: 0 4px; }
+.set-slider input { width: 100%; accent-color: var(--gold); }
+.set-slider.off { opacity: .45; }
+.set-version { text-align: center; }
+.icon-btn { width: 40px; height: 40px; padding: 0 !important; display: grid; place-items: center; }
+.res-levelup { background: #2a2238; border-radius: 4px; padding: 8px 10px; box-shadow: 0 0 0 2px var(--gold); text-align: center; }
+.res-levelup b { font-family: var(--font-display); font-weight: 400; font-size: 12px; color: var(--gold); display: block; margin-bottom: 4px; }
+.res-levelup span { display: block; font-size: 15px; }
+.hero-stats { padding: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.hero-stats .hs-head { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; }
+.hero-stats .hs-head b { font-family: var(--font-display); font-weight: 400; font-size: 12px; color: var(--gold); }
+.hero-stats .hs-xp { grid-column: 1 / -1; }
+.hero-stats .hs { display: flex; flex-direction: column; font-size: 14px; color: var(--muted); }
+.hero-stats .hs strong { color: var(--text); font-size: 17px; }
+.hero-stats .hs-next { grid-column: 1 / -1; font-size: 14px; color: var(--muted); }
+html, body { overscroll-behavior: none; }
+body { touch-action: manipulation; }
+button, .nav, .wpick, .node { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .save-tools { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; }
 .savebox { display: flex; flex-direction: column; gap: 8px; }
 #save-code { width: 100%; box-sizing: border-box; font-family: var(--font-code); font-size: 12px; color: var(--text); background: #17121f; border: 2px solid var(--edge); border-radius: 3px; padding: 8px; resize: vertical; word-break: break-all; }
@@ -132,6 +165,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--gold); outl
 .shop-name { font-size: 15px; text-align: center; }
 .shop-item .btn { width: 100%; font-size: 15px; padding: 7px 6px 9px; }
 .shop-item .btn[disabled] { opacity: .7; cursor: default; }
+.locked-item canvas { opacity: .35; filter: grayscale(1); }
 .opt { font-size: 14px; padding: 5px 9px 6px; border-radius: 3px; border: 2px solid var(--edge-dark); background: var(--panel-2); }
 .opt[aria-checked="true"] { outline: 3px solid var(--gold); outline-offset: 1px; }
 .opt-more { font-size: 13px; color: var(--muted); align-self: center; }
@@ -298,26 +332,28 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--gold); outl
       <p>Learn Python by casting spells</p>
     </div>
     <div class="title-card px">
-      <button id="btn-play" class="btn">New game</button>
-      <p class="small">Eighteen worlds from print to generators, 168 levels, six review bosses, an endless Tower, Training grounds and a shop. Questions change every time you play.</p>
-      <button id="btn-install" class="btn ghost" hidden>Install app</button>
-      <p id="install-hint" class="small install-hint" hidden></p>
-      <div class="save-tools"><button id="btn-backup" class="linkish">Back up save</button><button id="btn-restore" class="linkish">Restore save</button></div>
-      <div id="save-box" class="savebox" hidden>
-        <p id="save-msg" class="small"></p>
-        <textarea id="save-code" rows="4" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" aria-label="Save code"></textarea>
-        <div class="confirm">
-          <button id="save-copy" class="btn">Copy code</button>
-          <button id="save-load" class="btn">Restore this save</button>
-          <button id="save-close" class="btn ghost">Close</button>
+      <div id="menu-hero" class="menu-hero" hidden>
+        <canvas id="menu-portrait" width="56" height="56" aria-hidden="true"></canvas>
+        <div class="menu-hero-text">
+          <div class="menu-hero-name"><span id="menu-name"></span><span id="menu-lv"></span></div>
+          <div id="menu-rank" class="menu-rank"></div>
+          <div class="xpbar" role="img" id="menu-xp-wrap"><i id="menu-xp"></i></div>
         </div>
       </div>
-      <button id="btn-reset" class="linkish" hidden>Start over</button>
-      <div id="reset-confirm" class="confirm" hidden>
-        <span>Erase your hero and progress?</span>
-        <button id="btn-reset-yes" class="btn">Erase</button>
-        <button id="btn-reset-no" class="btn ghost">Keep</button>
+      <button id="btn-play" class="btn">New game</button>
+      <button id="btn-new" class="btn ghost" hidden>New game</button>
+      <div id="new-confirm" class="confirm" hidden>
+        <span>Start over? Your hero and progress will be erased. Back up your save first in Settings.</span>
+        <button id="btn-new-yes" class="btn">Erase and start</button>
+        <button id="btn-new-no" class="btn ghost">Keep playing</button>
       </div>
+      <div class="menu-row">
+        <button id="btn-menu-shop" class="btn ghost">Shop</button>
+        <button id="btn-menu-settings" class="btn ghost">Settings</button>
+      </div>
+      <button id="btn-install" class="btn ghost" hidden>Install app</button>
+      <p id="install-hint" class="small install-hint" hidden></p>
+      <p class="small menu-blurb">Eighteen worlds from print to generators, 168 levels, six review bosses, an endless Tower, Training grounds and a shop.</p>
     </div>
   </section>
 
@@ -326,6 +362,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--gold); outl
       <h2>Create your hero</h2>
       <button id="btn-creator-back" class="btn ghost" style="font-size:14px;padding:6px 12px 8px">Back</button>
     </div>
+    <div id="hero-stats" class="hero-stats px" hidden></div>
     <div class="creator-top">
       <canvas id="creator-cv" class="px" width="172" height="214" aria-label="Your hero"></canvas>
       <div id="creator-code" class="px" aria-live="polite"></div>
@@ -358,8 +395,8 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--gold); outl
         <button id="w-next" class="wnav" aria-label="Next world"></button>
       </div>
       <div class="map-tools">
-        <button id="btn-sound" class="btn ghost">Sound on</button>
-        <button id="btn-title" class="btn ghost" aria-label="Title screen">☰</button>
+        <button id="btn-map-settings" class="btn ghost icon-btn" aria-label="Settings"></button>
+        <button id="btn-title" class="btn ghost icon-btn" aria-label="Main menu"></button>
       </div>
     </div>
     <div class="map-row"><p id="map-sub" class="map-sub"></p><button id="btn-hard" class="btn ghost" hidden>Hard mode: off</button></div>
@@ -394,6 +431,37 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--gold); outl
     <div id="shop-pets" class="shop-grid"></div>
   </section>
 
+  <section id="scr-settings" class="screen" hidden>
+    <div class="panel-head">
+      <h2>Settings</h2>
+      <button id="settings-back" class="btn ghost" style="font-size:14px;padding:6px 12px 8px">Back</button>
+    </div>
+    <div class="set-group px">
+      <h3>Sound</h3>
+      <button class="set-toggle" id="set-mute" role="switch" aria-checked="false"><span>Mute everything</span><i></i></button>
+      <button class="set-toggle" id="set-music" role="switch" aria-checked="true"><span>Music</span><i></i></button>
+      <label class="set-slider"><span>Music volume</span><input id="set-music-vol" type="range" min="0" max="100" step="5"></label>
+      <button class="set-toggle" id="set-sfx" role="switch" aria-checked="true"><span>Sound effects</span><i></i></button>
+      <label class="set-slider"><span>Effects volume</span><input id="set-sfx-vol" type="range" min="0" max="100" step="5"></label>
+      <button class="set-toggle" id="set-vibrate" role="switch" aria-checked="true"><span>Vibration</span><i></i></button>
+    </div>
+    <div class="set-group px">
+      <h3>Your save</h3>
+      <p class="small">Progress is saved on this device automatically. A backup code moves it to another phone or browser.</p>
+      <div class="save-tools"><button id="btn-backup" class="btn ghost">Back up save</button><button id="btn-restore" class="btn ghost">Restore save</button></div>
+      <div id="save-box" class="savebox" hidden>
+        <p id="save-msg" class="small"></p>
+        <textarea id="save-code" rows="4" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" aria-label="Save code"></textarea>
+        <div class="confirm">
+          <button id="save-copy" class="btn">Copy code</button>
+          <button id="save-load" class="btn">Restore this save</button>
+          <button id="save-close" class="btn ghost">Close</button>
+        </div>
+      </div>
+    </div>
+    <p class="small set-version" id="set-version"></p>
+  </section>
+
   <section id="scr-level" class="screen" hidden>
     <div class="lv-top">
       <button id="lv-exit" class="btn ghost" aria-label="Back to map">✕</button>
@@ -401,6 +469,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--gold); outl
         <h2 id="lv-title"></h2>
         <div id="lv-dots" role="img"></div>
       </div>
+      <button id="lv-settings" class="btn ghost icon-btn" aria-label="Settings"></button>
     </div>
     <div class="scene">
       <canvas id="scene-cv" width="320" height="180" aria-label="Battle scene"></canvas>
@@ -440,6 +509,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--gold); outl
         <h2 id="res-title">Level complete</h2>
         <div id="res-stars" role="img"></div>
         <p id="res-note"></p>
+        <div id="res-levelup" class="res-levelup" hidden></div>
         <div class="res-gains"><span><span id="res-xp"></span> XP</span><span><span id="res-gold"></span> gold</span></div>
         <div id="res-learn"></div>
         <p id="res-soon" hidden></p>
@@ -470,6 +540,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--gold); outl
   <div id="toast" hidden role="status"></div>
 </div>
 
+<script src="audio.js"></script>
 <script src="py.js"></script>
 <script src="arena.js"></script>
 <script src="engine.js"></script>

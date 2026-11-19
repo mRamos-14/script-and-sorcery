@@ -12,7 +12,8 @@
   /* ---------------- save ---------------- */
   const SAVE_KEY = 'script-sorcery-v1';
   const DEFAULT_HERO = { name: 'Pip', hair: 1, skin: 1, robe: 0, hat: 1, gem: 0, hatStyle: 'wizard', pet: 'none' };
-  function freshSave() { return { hero: null, done: {}, xp: 0, gold: 0, streak: 0, lastDay: null, muted: false, world: 0, arenaBest: 0, towerBest: 0, weak: {}, hard: {}, hardOn: {}, owned: { hats: ['wizard', 'none'], pets: ['none'] } }; }
+  const DEFAULT_SETTINGS = { mute: false, music: true, sfx: true, musicVol: 0.6, sfxVol: 0.8, vibrate: true };
+  function freshSave() { return { hero: null, done: {}, xp: 0, gold: 0, streak: 0, lastDay: null, settings: { ...DEFAULT_SETTINGS }, world: 0, arenaBest: 0, towerBest: 0, weak: {}, hard: {}, hardOn: {}, owned: { hats: ['wizard', 'none'], pets: ['none'] } }; }
   function loadSave() {
     let s = null;
     try { s = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { /* storage blocked */ }
@@ -22,6 +23,8 @@
     if (!s.owned.hats) s.owned.hats = ['wizard', 'none'];
     if (!s.owned.pets) s.owned.pets = ['none'];
     if (s.hero) s.hero = { ...DEFAULT_HERO, ...s.hero };
+    s.settings = { ...DEFAULT_SETTINGS, ...(s.settings || {}) };
+    if (s.muted) { s.settings.mute = true; delete s.muted; }
     return s;
   }
   let save = loadSave();
@@ -268,22 +271,13 @@
   const WHO_NAME = who => (who === 'hero' ? save.hero.name : who === 'narrator' ? 'Quest' : NPCS[who] ? NPCS[who].name : FOES[who] ? FOES[who].name : who);
 
   /* ---------------- sound ---------------- */
-  let actx = null;
-  function sfx(kind) {
-    if (save.muted) return;
-    try {
-      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-      const P = { tap: [660, 0.05, 'square'], cast: [300, 0.2, 'sawtooth', 900], hit: [160, 0.15, 'square', 60], ok: [523, 0.15, 'square', 1046], bad: [240, 0.22, 'triangle', 120], err: [190, 0.28, 'sawtooth', 80], win: [523, 0.5, 'square', 1568], coin: [988, 0.12, 'square', 1319] }[kind];
-      const o = actx.createOscillator(), g = actx.createGain(), now = actx.currentTime;
-      o.type = P[2];
-      o.frequency.setValueAtTime(P[0], now);
-      if (P[3]) o.frequency.exponentialRampToValueAtTime(P[3], now + P[1]);
-      g.gain.setValueAtTime(0.05, now);
-      g.gain.exponentialRampToValueAtTime(0.0001, now + P[1]);
-      o.connect(g).connect(actx.destination);
-      o.start(now); o.stop(now + P[1] + 0.02);
-    } catch (e) { /* audio unavailable */ }
-  }
+  const sfx = kind => Sound.sfx(kind);
+  Sound.configure(save.settings);
+  // browsers start sound only after the first touch
+  const unlockSound = () => Sound.unlock();
+  document.addEventListener('pointerdown', unlockSound, true);
+  document.addEventListener('keydown', unlockSound, true);
+  document.addEventListener('visibilitychange', () => Sound.pause(document.hidden));
 
   /* ---------------- images ---------------- */
   const IMG = {};
@@ -291,14 +285,49 @@
   function bgImage(k) { if (!IMG[k]) { IMG[k] = new Image(); IMG[k].src = `assets/bg-${k}.jpg`; } return IMG[k]; }
 
   /* ---------------- screens ---------------- */
-  const screens = ['title', 'creator', 'map', 'level', 'book', 'shop'];
+  const screens = ['title', 'creator', 'map', 'level', 'book', 'shop', 'settings'];
+  let currentScreen = 'title', settingsReturn = 'title', shopReturn = 'map';
+  // the music follows where you are: menu, world map, lesson, battle, boss, Tower, Training
+  function updateMusic() {
+    const scr = currentScreen === 'settings' ? settingsReturn : currentScreen;
+    if (scr === 'title' || !save.hero) { Sound.music('menu'); return; }
+    if (scr === 'level' && L) {
+      const wid = L.w != null && WORLDS[L.w] ? WORLDS[L.w].id : 0;
+      if (L.tower) Sound.music('tower');
+      else if (L.arena) Sound.music('train');
+      else if (scene.right && scene.right.type === 'foe') Sound.music(L.def.boss ? 'boss' : 'battle', wid);
+      else Sound.music('level', wid);
+      return;
+    }
+    Sound.music('map', WORLDS[save.world] ? WORLDS[save.world].id : 1);
+  }
+  // Android's back button moves back inside the game instead of closing it
+  let backGuard = false;
+  function armBack() { if (!backGuard) { try { history.pushState({ sorcery: 1 }, ''); backGuard = true; } catch (e) { /* not allowed here */ } } }
+  window.addEventListener('popstate', () => {
+    backGuard = false;
+    if (currentScreen === 'title') return;
+    if (!$('#faint').hidden) { /* wait for the player to choose */ }
+    else if (!$('#result').hidden) $('#res-map').click();
+    else if (currentScreen === 'settings') $('#settings-back').click();
+    else if (currentScreen === 'level') { if (!(L && L.busy)) $('#lv-exit').click(); }
+    else if (currentScreen === 'map') show('title');
+    else if (currentScreen === 'shop') $('#shop-back').click();
+    else if (currentScreen === 'book') $('#book-back').click();
+    else if (currentScreen === 'creator') $('#btn-creator-back').click();
+    if (currentScreen !== 'title') armBack();
+  });
   function show(name) {
+    currentScreen = name;
+    if (name !== 'title') armBack();
     for (const s of screens) $('#scr-' + s).hidden = s !== name;
     scene.active = name === 'level';
     if (name === 'map') renderMap();
     if (name === 'book') renderBook();
     if (name === 'title') renderTitle();
     if (name === 'shop') renderShop();
+    if (name === 'settings') renderSettings();
+    updateMusic();
     document.querySelectorAll('.nav .btn').forEach(b => b.classList.toggle('ghost', b.dataset.nav !== name));
     window.scrollTo(0, 0);
   }
@@ -315,14 +344,52 @@
 
   /* ---------------- title ---------------- */
   function renderTitle() {
-    $('#btn-play').textContent = save.hero ? 'Continue' : 'New game';
-    $('#btn-reset').hidden = !save.hero;
-    $('#reset-confirm').hidden = true;
+    const has = !!save.hero;
+    $('#menu-hero').hidden = !has;
+    if (has) {
+      const info = levelInfo();
+      portrait($('#menu-portrait'), 'hero');
+      $('#menu-name').textContent = save.hero.name;
+      $('#menu-lv').textContent = 'Lv ' + info.level;
+      $('#menu-rank').textContent = `${rankOf(info.level)} · ${Object.keys(save.done).length} levels cleared · ${save.gold} gold`;
+      $('#menu-xp').style.width = Math.round(100 * info.into / info.need) + '%';
+      $('#menu-xp-wrap').setAttribute('aria-label', `${info.into} of ${info.need} XP to level ${info.level + 1}`);
+    }
+    $('#btn-play').textContent = has ? 'Continue' : 'New game';
+    $('#btn-new').hidden = !has;
+    $('#new-confirm').hidden = true;
+    $('#btn-menu-shop').hidden = !has;
   }
   $('#btn-play').onclick = () => { sfx('tap'); if (save.hero) show('map'); else openCreator(false); };
-  $('#btn-reset').onclick = () => { $('#reset-confirm').hidden = false; };
-  $('#btn-reset-no').onclick = () => { $('#reset-confirm').hidden = true; };
-  $('#btn-reset-yes').onclick = () => { save = freshSave(); persist(); renderTitle(); };
+  $('#btn-new').onclick = () => { sfx('tap'); $('#new-confirm').hidden = false; };
+  $('#btn-new-no').onclick = () => { sfx('tap'); $('#new-confirm').hidden = true; };
+  $('#btn-new-yes').onclick = () => { const keep = save.settings; save = freshSave(); save.settings = keep; persist(); openCreator(false); };
+  $('#btn-menu-shop').onclick = () => { sfx('tap'); shopReturn = 'title'; show('shop'); };
+  $('#btn-menu-settings').onclick = () => { sfx('tap'); openSettings(); };
+
+  /* ---------------- settings ---------------- */
+  function openSettings() { if (currentScreen !== 'settings') settingsReturn = currentScreen; show('settings'); }
+  function renderSettings() {
+    const st = save.settings;
+    const sw = (id, on) => $(id).setAttribute('aria-checked', on ? 'true' : 'false');
+    sw('#set-mute', st.mute); sw('#set-music', st.music); sw('#set-sfx', st.sfx); sw('#set-vibrate', st.vibrate);
+    $('#set-music-vol').value = Math.round(st.musicVol * 100);
+    $('#set-sfx-vol').value = Math.round(st.sfxVol * 100);
+    $('#set-music-vol').closest('.set-slider').classList.toggle('off', st.mute || !st.music);
+    $('#set-sfx-vol').closest('.set-slider').classList.toggle('off', st.mute || !st.sfx);
+    $('#save-box').hidden = true;
+    $('#set-version').textContent = `Script & Sorcery · ${WORLDS.length} worlds · ${WORLDS.reduce((n, w) => n + w.levels.length, 0)} levels`;
+  }
+  const changeSetting = (k, v) => { save.settings[k] = v; persist(); Sound.configure(save.settings); renderSettings(); };
+  $('#set-mute').onclick = () => { changeSetting('mute', !save.settings.mute); sfx('tap'); };
+  $('#set-music').onclick = () => { changeSetting('music', !save.settings.music); sfx('tap'); };
+  $('#set-sfx').onclick = () => { changeSetting('sfx', !save.settings.sfx); sfx('tap'); };
+  $('#set-vibrate').onclick = () => { changeSetting('vibrate', !save.settings.vibrate); Sound.vibrate(60); sfx('tap'); };
+  $('#set-music-vol').oninput = e => { save.settings.musicVol = e.target.value / 100; Sound.configure(save.settings); };
+  $('#set-music-vol').onchange = () => persist();
+  $('#set-sfx-vol').oninput = e => { save.settings.sfxVol = e.target.value / 100; Sound.configure(save.settings); };
+  $('#set-sfx-vol').onchange = () => { persist(); sfx('coin'); };
+  $('#settings-back').onclick = () => { sfx('tap'); show(settingsReturn === 'settings' ? 'title' : settingsReturn); };
 
   /* save backup: a text code you can carry to another browser or a new version */
   const SAVE_PREFIX = 'SS1:';
@@ -376,13 +443,17 @@
   /* ---------------- creator ---------------- */
   let draft = null;
   const PARTS = [['hair', 'Hair', HAIR], ['skin', 'Skin', SKIN], ['robe', 'Robe', CLOTH], ['hat', 'Hat color', CLOTH], ['gem', 'Staff gem', GEM]];
-  const HATS = { wizard: ['Wizard hat', 0], none: ['No hat', 0], cap: ['Ranger cap', 40], hood: ['Shadow hood', 60], crown: ['Gold crown', 150] };
-  const PETS = { none: ['No pet', 0], slimey: ['Slimey', 50], owl: ['Hoot the owl', 80], drake: ['Ember drake', 200] };
+  // name, price, hero level needed
+  const HATS = { wizard: ['Wizard hat', 0, 1], none: ['No hat', 0, 1], cap: ['Ranger cap', 40, 3], hood: ['Shadow hood', 60, 7], crown: ['Gold crown', 150, 15] };
+  const PETS = { none: ['No pet', 0, 1], slimey: ['Slimey', 50, 2], owl: ['Hoot the owl', 80, 5], drake: ['Ember drake', 200, 11] };
   function openCreator(isEdit) {
     draft = { ...DEFAULT_HERO, ...(save.hero || {}) };
     $('#hero-name').value = draft.name;
     $('#btn-begin').textContent = isEdit ? 'Save hero' : 'Begin quest';
     $('#btn-creator-back').hidden = !isEdit && !save.hero;
+    renderHeroStats();
+    $('#hero-stats').hidden = !isEdit;
+    $('#scr-creator h2').textContent = isEdit ? 'Your hero' : 'Create your hero';
     const rows = $('#parts');
     rows.innerHTML = '';
     for (const [key, label, list] of PARTS) {
@@ -461,16 +532,77 @@
   /* ---------------- map ---------------- */
   const worldUnlocked = w => w === 0 || WORLDS[w - 1].levels.every(l => save.done[l.id]);
   const levelUnlocked = (w, i) => (i === 0 ? worldUnlocked(w) : !!save.done[WORLDS[w].levels[i - 1].id]);
-  function heroLevel() { return Math.floor(save.xp / 100) + 1; }
+  /* ---------------- hero growth ----------------
+     Each level needs a bit more XP than the last, so levels keep coming all game.
+     Levels bring ranks, extra hearts, a mana ward, a stronger glow, more gold,
+     stronger Training spells and shop unlocks. They never change what a spell
+     does in a lesson, so every question still has exactly one right answer. */
+  const needFor = n => 80 + 20 * n;
+  function levelInfo(xp = save.xp) { let lv = 1, rest = xp; while (rest >= needFor(lv)) { rest -= needFor(lv); lv++; } return { level: lv, into: rest, need: needFor(lv) }; }
+  const heroLevel = () => levelInfo().level;
+  const RANKS = [[1, 'Apprentice'], [4, 'Spell-scribe'], [8, 'Adept'], [12, 'Mage'], [17, 'Sorcerer'], [23, 'Archmage'], [30, 'Grand Archmage'], [40, 'Legend of the Source']];
+  const rankOf = lv => RANKS.filter(r => lv >= r[0]).pop()[1];
+  const AURAS = [[8, 'blue', '#5fd3ff'], [17, 'violet', '#c79bff'], [23, 'gold', '#ffd75f'], [30, 'white', '#ffffff']];
+  const auraOf = lv => { const a = AURAS.filter(x => lv >= x[0]).pop(); return a ? a[2] : null; };
+  const heartBonus = lv => (lv >= 6) + (lv >= 14) + (lv >= 25);
+  const goldBonus = lv => Math.min(0.6, 0.02 * (lv - 1));
+  const trainPower = lv => 10 + Math.floor((lv - 1) / 2);
+  const hasWard = lv => lv >= 10;
+  function perksAt(lv) {
+    const out = [];
+    const r = RANKS.find(x => x[0] === lv);
+    if (r) out.push(`New rank: ${r[1]}`);
+    if ([6, 14, 25].includes(lv)) out.push('+1 heart in every battle');
+    if (lv === 10) out.push('Mana ward: the first hit in each battle is blocked');
+    const au = AURAS.find(x => x[0] === lv);
+    if (au) out.push(`Your aura now glows ${au[1]}`);
+    for (const [, v] of [...Object.entries(HATS), ...Object.entries(PETS)]) if (v[2] === lv) out.push(`Shop unlock: ${v[0]}`);
+    if (lv % 2 === 1) out.push('Training spells hit harder');
+    out.push('+2% gold from every win');
+    return out;
+  }
+  function nextPerk(lv) { for (let n = lv + 1; n < lv + 40; n++) { const p = perksAt(n).filter(x => !/^\+2% gold|Training spells/.test(x)); if (p.length) return [n, p[0]]; } return null; }
+  // add XP and gold (gold grows with level); returns the levels gained
+  function grant(xp, gold) {
+    const before = heroLevel();
+    const g = Math.round(gold * (1 + goldBonus(before)));
+    save.xp += xp; save.gold += g;
+    const after = heroLevel();
+    const ups = [];
+    for (let l = before + 1; l <= after; l++) ups.push(l);
+    return { gold: g, ups };
+  }
+  function showLevelUp(ups) {
+    const box = $('#res-levelup');
+    if (!ups.length) { box.hidden = true; return; }
+    const lv = ups[ups.length - 1];
+    const perks = [...new Set(ups.flatMap(perksAt))];
+    box.innerHTML = `<b>Level up! Lv ${lv}, ${esc(rankOf(lv))}</b>` + perks.map(p => `<span>${esc(p)}</span>`).join('');
+    box.hidden = false;
+    setTimeout(() => { sfx('level'); Sound.vibrate([60, 40, 90]); }, 450);
+  }
+  function renderHeroStats() {
+    const box = $('#hero-stats');
+    if (!save.hero) { box.hidden = true; return; }
+    const info = levelInfo(), lv = info.level, np = nextPerk(lv);
+    box.hidden = false;
+    box.innerHTML = `<div class="hs-head"><b>Lv ${lv} ${esc(rankOf(lv))}</b><span class="small">${save.xp} XP total</span></div>
+      <div class="xpbar hs-xp" role="img" aria-label="${info.into} of ${info.need} XP to level ${lv + 1}"><i style="width:${Math.round(100 * info.into / info.need)}%"></i></div>
+      <div class="hs"><strong>${3 + heartBonus(lv)}</strong>hearts in battle</div>
+      <div class="hs"><strong>${hasWard(lv) ? 'Yes' : 'Lv 10'}</strong>mana ward</div>
+      <div class="hs"><strong>+${Math.round(goldBonus(lv) * 100)}%</strong>gold found</div>
+      <div class="hs"><strong>${trainPower(lv)}</strong>Training spell power</div>
+      ${np ? `<div class="hs-next">Next at Lv ${np[0]}: ${esc(np[1])}</div>` : ''}`;
+  }
   function renderHud() {
     portrait($('#hud-portrait'), 'hero');
     $('#hud-name').textContent = save.hero.name;
-    $('#hud-lv').textContent = 'Lv ' + heroLevel();
-    $('#hud-xp').style.width = (save.xp % 100) + '%';
-    $('#hud-xp-wrap').setAttribute('aria-label', `${save.xp % 100} of 100 xp to next level`);
+    const info = levelInfo();
+    $('#hud-lv').textContent = 'Lv ' + info.level;
+    $('#hud-xp').style.width = Math.round(100 * info.into / info.need) + '%';
+    $('#hud-xp-wrap').setAttribute('aria-label', `${info.into} of ${info.need} XP to level ${info.level + 1}`);
     $('#hud-gold').textContent = save.gold;
     $('#hud-streak').textContent = save.streak || 0;
-    $('#btn-sound').textContent = save.muted ? 'Sound off' : 'Sound on';
   }
   function renderMap() {
     renderHud();
@@ -496,6 +628,7 @@
       sfx('tap'); save.world = wi + 1; persist(); renderMap();
     };
     $('#map-sub').textContent = `${W.name} · ${W.topic}`;
+    if (currentScreen === 'map') updateMusic();
     $('#map-wrap').style.backgroundImage = `url(assets/${W.map})`;
     const box = $('#map-nodes');
     box.innerHTML = '';
@@ -545,9 +678,15 @@
     return s;
   }
   $('#book-back').onclick = () => show('map');
-  $('#shop-back').onclick = () => show('map');
-  $('#btn-sound').onclick = () => { save.muted = !save.muted; persist(); renderHud(); sfx('tap'); };
-  $('#btn-title').onclick = () => show('title');
+  $('#shop-back').onclick = () => { show(shopReturn); shopReturn = 'map'; };
+  const GEAR = '<svg viewBox="0 0 9 9" width="18" height="18" aria-hidden="true" shape-rendering="crispEdges"><path fill="currentColor" d="M3 0h3v1h1v1h1v1h1v3H8v1H7v1H6v1H3V8H2V7H1V6H0V3h1V2h1V1h1zm0 3v3h3V3z"/></svg>';
+  const HOME = '<svg viewBox="0 0 9 9" width="18" height="18" aria-hidden="true" shape-rendering="crispEdges"><path fill="currentColor" d="M4 0h1v1h1v1h1v1h1v1h1v1H8v4H5V6H4v3H1V5H0V4h1V3h1V2h1V1h1z"/></svg>';
+  $('#btn-map-settings').innerHTML = GEAR;
+  $('#btn-title').innerHTML = HOME;
+  $('#lv-settings').innerHTML = GEAR;
+  $('#btn-map-settings').onclick = () => { sfx('tap'); openSettings(); };
+  $('#lv-settings').onclick = () => { if (L && L.busy) return; sfx('tap'); openSettings(); };
+  $('#btn-title').onclick = () => { sfx('tap'); show('title'); };
 
   /* ---------------- spellbook (glossary) ---------------- */
   function renderBook() {
@@ -576,8 +715,10 @@
   /* ---------------- shop ---------------- */
   function renderShop() {
     $('#shop-gold').textContent = save.gold;
-    const card = (kind, id, [label, price]) => {
+    const lvNow = heroLevel();
+    const card = (kind, id, [label, price, need]) => {
       const owned = (kind === 'hat' ? save.owned.hats : save.owned.pets).includes(id);
+      if (!owned && need > lvNow) return `<div class="shop-item px locked-item" data-kind="${kind}" data-id="${id}"><canvas width="88" height="88" aria-hidden="true"></canvas><div class="shop-name">${esc(label)}</div><button class="btn ghost" disabled>Reach Lv ${need}</button></div>`;
       const equipped = save.hero && (kind === 'hat' ? save.hero.hatStyle : save.hero.pet) === id;
       const btn = equipped ? '<button class="btn ghost" disabled>Equipped</button>' : owned ? `<button class="btn ghost" data-act="equip">Equip</button>` : `<button class="btn" data-act="buy">${price} gold</button>`;
       return `<div class="shop-item px" data-kind="${kind}" data-id="${id}"><canvas width="88" height="88" aria-hidden="true"></canvas><div class="shop-name">${esc(label)}</div>${btn}</div>`;
@@ -630,6 +771,7 @@
       scene.right = { type: 'foe', id: spec.kind, hp: spec.hp, max: spec.hp, flash: 0, lunge: 0, alpha: 1, dying: false, tint: spec.tint || '', s: f.s + (spec.tint === 'big' ? 1 : 0), weak: spec.weak || null, resist: spec.resist || null, spec: { ...spec } };
     }
     updateFoeBar();
+    if (currentScreen === 'level') updateMusic();
   }
   // what the variation engine sees of the current foe: its spawn data plus live hp
   const foeCtx = () => (scene.right && scene.right.type === 'foe' ? { ...scene.right.spec, hp: scene.right.hp, weak: scene.right.weak, resist: scene.right.resist } : null);
@@ -686,6 +828,18 @@
     const hero = save.hero || DEFAULT_HERO;
     if (hero.pet && hero.pet !== 'none') drawPet(c, hero.pet, HERO_X - 26, GROUND, 2, scene.t);
     const bob = reduceMotion ? 0 : Math.round(Math.sin(scene.t / 18));
+    const aura = save.hero ? auraOf(heroLevel()) : null;
+    if (aura) {
+      // a glowing magic circle under the hero, brighter at higher ranks
+      const pulse = reduceMotion ? 1 : 0.8 + 0.2 * Math.sin(scene.t / 14);
+      const cx = HERO_X + 18, cy = GROUND - 1;
+      const g = c.createRadialGradient(cx, cy, 1, cx, cy, 34);
+      g.addColorStop(0, aura + 'cc'); g.addColorStop(0.6, aura + '55'); g.addColorStop(1, aura + '00');
+      c.globalAlpha = pulse; c.fillStyle = g;
+      c.beginPath(); c.ellipse(cx, cy, 34, 9, 0, 0, Math.PI * 2); c.fill();
+      c.globalAlpha = 1;
+      if (!reduceMotion && scene.t % 5 === 0) scene.fx.push({ type: 'p', x: HERO_X + 2 + Math.random() * 32, y: GROUND - 2 - Math.random() * 10, vx: (Math.random() - 0.5) * 0.3, vy: -0.7 - Math.random() * 0.5, life: 26, col: aura });
+    }
     drawHero(c, hero, HERO_X, GROUND - 50 + bob, 2, { white: scene.heroFlash > 0 && scene.heroFlash % 4 < 2, glow: scene.heroGlow > 0 });
     if (scene.heroFlash > 0) scene.heroFlash--;
     if (scene.heroGlow > 0) scene.heroGlow--;
@@ -783,14 +937,14 @@
       }, dur);
     });
   }
-  async function counterattack(healTo) {
+  async function counterattack(healTo, warded) {
     const r = scene.right;
     if (!r || r.type !== 'foe') return;
     r.dying = false; r.alpha = 1;
     r.lunge = 24;
     await wait(200);
-    scene.heroFlash = 16; scene.shake = 6; sfx('bad');
-    floatText('-1 heart', HERO_X + 20, GROUND - 60, 'dmg');
+    if (warded) { burst(HERO_X + 18, GROUND - 30, '#7fdcff', 22); sfx('ok'); floatText('Ward!', HERO_X + 20, GROUND - 60, 'heal'); }
+    else { scene.heroFlash = 16; scene.shake = 6; sfx('bad'); Sound.vibrate(120); floatText('-1 heart', HERO_X + 20, GROUND - 60, 'dmg'); }
     await wait(300);
     if (healTo != null && r.hp < healTo) {
       floatText('+' + (healTo - r.hp), RIGHT_X, rightBox().y - 4, 'heal');
@@ -827,7 +981,8 @@
   function startLevel(w, i, opts = {}) {
     const def = WORLDS[w].levels[i];
     const hard = opts.hard != null ? opts.hard : !!(save.hardOn || {})[WORLDS[w].id];
-    L = { w, i, def, idx: -1, fails: 0, busy: false, hearts: hard ? 2 : 3, maxHearts: hard ? 2 : 3, hard };
+    const hp0 = (hard ? 2 : 3) + heartBonus(heroLevel());
+    L = { w, i, def, idx: -1, fails: 0, busy: false, hearts: hp0, maxHearts: hp0, hard, ward: hasWard(heroLevel()) };
     scene.bg = def.bg;
     scene.fx = [];
     scene.heroFlash = 0; scene.heroGlow = 0; scene.shake = 0;
@@ -1078,6 +1233,12 @@
     mentorSay(msg, 'bad');
     const battle = scene.right && scene.right.type === 'foe';
     if (!battle) return false;
+    if (L.ward) {
+      L.ward = false;
+      await counterattack(heal ? L.startHp : null, true);
+      mentorSay(msg + ' Your mana ward blocked the hit!', 'bad');
+      return false;
+    }
     L.hearts--;
     renderHearts();
     await counterattack(heal ? L.startHp : null);
@@ -1086,6 +1247,7 @@
   }
   function faint() {
     sfx('err');
+    Sound.vibrate([120, 60, 220]);
     $('#faint-text').textContent = `The ${foeName(scene.right).toLowerCase()} knocked you out. Your hearts are back. Read the hints and try that spell again.`;
     if (L.tower) $("#faint-text").textContent = `The ${foeName(scene.right).toLowerCase()} knocked you out on floor ${L.floor}. Your climb ends here, but the gold you won is yours.`;
     $("#faint-retry").textContent = L.tower ? "See results" : "Try again";
@@ -1094,7 +1256,7 @@
     $('#faint-retry').onclick = () => {
       sfx('tap');
       $('#faint').hidden = true;
-      L.hearts = 3;
+      L.hearts = L.maxHearts || 3;
       if (scene.right && scene.right.type === 'foe') { scene.right.hp = L.startHp; scene.right.dying = false; scene.right.alpha = 1; updateFoeBar(); }
       L.busy = false;
       if (L.arena) { arenaRestart(); return; }
@@ -1482,10 +1644,11 @@
     const gold = Math.round((stars * 5 + (def.boss ? 50 : 0)) * (L.hard ? 1.5 : 1));
     save.done[def.id] = Math.max(save.done[def.id] || 0, stars);
     if (L.hard) { save.hard = save.hard || {}; save.hard[def.id] = Math.max(save.hard[def.id] || 0, stars); }
-    save.xp += xp; save.gold += gold;
+    const gain = grant(xp, gold);
     bumpStreak();
     persist();
     sfx('win');
+    Sound.music(null);
     const W = WORLDS[L.w], nextW = WORLDS[L.w + 1];
     $('#res-title').textContent = L.i === W.levels.length - 1 ? `World ${W.id} cleared!` : def.boss ? 'Boss defeated!' : 'Level complete';
     $('#res-stars').hidden = false;
@@ -1493,7 +1656,8 @@
     $('#res-stars').setAttribute('aria-label', `${stars} of 3 stars`);
     $('#res-note').textContent = stars === 3 ? 'Flawless. No mistakes at all.' : `${L.fails} mistake${L.fails === 1 ? '' : 's'}. Replay any time for 3 stars.`;
     $('#res-xp').textContent = '+' + xp;
-    $('#res-gold').textContent = '+' + gold;
+    $('#res-gold').textContent = '+' + gain.gold;
+    showLevelUp(gain.ups);
     $('#res-learn').hidden = false;
     $('#res-learn').innerHTML = `<div class="ctrl-label">${first ? 'New spellbook pages' : 'Spellbook pages'}</div>` +
       def.learn.map(e => `<div class="res-entry"><code>${Py.highlight(e.code)}</code><span>${esc(e.title)}</span></div>`).join('');
@@ -1525,7 +1689,8 @@
     const tags = unlockedTags();
     if (!save.hero) return;
     if (!tags.length) { toast('Finish level 1-1 to open the Training grounds.'); return; }
-    L = { arena: true, def: { mentor: 'coach', steps: [] }, tags, wave: 1, score: 0, combo: 0, hearts: 3, fails: 0, busy: false };
+    const hp0 = 3 + heartBonus(heroLevel());
+    L = { arena: true, def: { mentor: 'coach', steps: [] }, tags, wave: 1, score: 0, combo: 0, hearts: hp0, maxHearts: hp0, fails: 0, busy: false };
     scene.bg = 'arena';
     scene.fx = [];
     scene.heroFlash = 0; scene.heroGlow = 0; scene.shake = 0;
@@ -1585,7 +1750,8 @@
         if (k === q.answer) {
           L.combo++;
           const crit = L.combo >= 3;
-          await castFx(pick(['fireball', 'spark', 'icebolt']), crit ? 15 : 10, crit ? 'Crit!' : '');
+          const tp = trainPower(heroLevel());
+          await castFx(pick(['fireball', 'spark', 'icebolt']), crit ? Math.round(tp * 1.5) : tp, crit ? 'Crit!' : '');
           sfx('ok');
           say('coach', `${praise()} ${q.explain}`, 'good');
           if (scene.right.hp <= 0) {
@@ -1614,15 +1780,18 @@
     const best = Math.max(save.arenaBest || 0, L.score);
     const isBest = L.score > (save.arenaBest || 0);
     const gold = L.score * 4, xp = L.score * 6;
-    save.arenaBest = best; save.gold += gold; save.xp += xp;
+    save.arenaBest = best;
+    const gain = grant(xp, gold);
     if (L.score > 0) bumpStreak();
     persist();
     sfx(isBest && L.score > 0 ? 'win' : 'bad');
+    Sound.music(null);
     $('#res-title').textContent = 'Training over';
     $('#res-stars').hidden = true;
     $('#res-note').textContent = `You beat ${L.score} monster${L.score === 1 ? '' : 's'}. ${isBest && L.score > 0 ? 'New best!' : `Best: ${best}.`}`;
     $('#res-xp').textContent = '+' + xp;
-    $('#res-gold').textContent = '+' + gold;
+    $('#res-gold').textContent = '+' + gain.gold;
+    showLevelUp(gain.ups);
     $('#res-learn').hidden = true;
     $('#res-soon').hidden = true;
     const nb = $('#res-next');
@@ -1657,7 +1826,8 @@
     if (!save.hero) return;
     const pool = towerPool();
     if (pool.length < 5) { toast('Beat a few more levels to open the Tower.'); return; }
-    L = { tower: true, def: { id: 'tower', mentor: 'oracle', tags: [], steps: [], learn: [] }, pool, floor: 1, idx: -1, fails: 0, busy: false, hearts: 3, maxHearts: 3, gold: 0 };
+    const hp0 = 3 + heartBonus(heroLevel());
+    L = { tower: true, def: { id: 'tower', mentor: 'oracle', tags: [], steps: [], learn: [] }, pool, floor: 1, idx: -1, fails: 0, busy: false, hearts: hp0, maxHearts: hp0, gold: 0, ward: hasWard(heroLevel()) };
     scene.bg = 'stairs';
     scene.fx = [];
     scene.heroFlash = 0; scene.heroGlow = 0; scene.shake = 0;
@@ -1722,7 +1892,7 @@
     const isBest = reached > (save.towerBest || 0);
     save.towerBest = best;
     const xp = reached * 8;
-    save.gold += L.gold; save.xp += xp;
+    const gain = grant(xp, L.gold);
     if (reached > 0) bumpStreak();
     persist();
     sfx(isBest && reached > 0 ? 'win' : 'bad');
@@ -1731,7 +1901,9 @@
     $('#res-stars').hidden = true;
     $('#res-note').textContent = `You cleared ${reached} floor${reached === 1 ? '' : 's'}. ${isBest && reached > 0 ? 'New best!' : `Best: floor ${best}.`}`;
     $('#res-xp').textContent = '+' + xp;
-    $('#res-gold').textContent = '+' + L.gold;
+    Sound.music(null);
+    $('#res-gold').textContent = '+' + gain.gold;
+    showLevelUp(gain.ups);
     $('#res-learn').hidden = true;
     $('#res-soon').hidden = true;
     const nb = $('#res-next');
