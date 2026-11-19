@@ -1,5 +1,7 @@
-# Publishes the game to GitHub Pages every time main is updated.
-name: Publish game
+# On every update: play every level to make sure nothing broke.
+# If the repository is public, also publish the game to GitHub Pages
+# (a free account cannot host Pages from a private repository).
+name: Check and publish
 on:
   push:
     branches: [main]
@@ -12,18 +14,26 @@ concurrency:
   group: pages
   cancel-in-progress: true
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check every level
+        run: node tools/check-levels.js 8
+      - name: Check the Training-grounds questions
+        run: node tools/check-arena.js
   build:
+    needs: check
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Check every level
-        run: node tools/check-levels.js 8
       - name: Build the site
         run: python tools/build_site.py
       - uses: actions/upload-pages-artifact@v3
@@ -31,6 +41,7 @@ jobs:
           path: _site
   deploy:
     needs: build
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages
