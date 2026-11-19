@@ -25,6 +25,7 @@ APP_HEAD = (
     '<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">'
 )
 MANIFEST = {
+    'id': './',
     'name': 'Script & Sorcery',
     'short_name': 'Sorcery',
     'description': 'Learn Python by casting spells.',

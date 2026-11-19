@@ -54,6 +54,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--gold); outl
 .linkish { background: none; border: 0; color: var(--muted); text-decoration: underline; font-size: 15px; padding: 4px; align-self: center; }
 .confirm { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 15px; justify-content: center; }
 .confirm .btn { font-size: 15px; padding: 8px 12px 10px; }
+.install-hint { color: var(--text); text-align: center; }
 .save-tools { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; }
 .savebox { display: flex; flex-direction: column; gap: 8px; }
 #save-code { width: 100%; box-sizing: border-box; font-family: var(--font-code); font-size: 12px; color: var(--text); background: #17121f; border: 2px solid var(--edge); border-radius: 3px; padding: 8px; resize: vertical; word-break: break-all; }
@@ -299,6 +300,8 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--gold); outl
     <div class="title-card px">
       <button id="btn-play" class="btn">New game</button>
       <p class="small">Eighteen worlds from print to generators, 168 levels, six review bosses, an endless Tower, Training grounds and a shop. Questions change every time you play.</p>
+      <button id="btn-install" class="btn ghost" hidden>Install app</button>
+      <p id="install-hint" class="small install-hint" hidden></p>
       <div class="save-tools"><button id="btn-backup" class="linkish">Back up save</button><button id="btn-restore" class="linkish">Restore save</button></div>
       <div id="save-box" class="savebox" hidden>
         <p id="save-msg" class="small"></p>

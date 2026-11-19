@@ -1744,8 +1744,38 @@
   }
 
   /* ---------------- installable app (only on the hosted build) ---------------- */
-  if (document.querySelector('meta[name="sorcery-pwa"]') && 'serviceWorker' in navigator) {
+  const hosted = !!document.querySelector('meta[name="sorcery-pwa"]');
+  if (hosted && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => { /* plays fine online without it */ }); });
+  }
+  // Install button: uses Chrome's own install box when it is offered, and explains
+  // what to do when it is not (inside another app's browser, iPhone, already installed).
+  if (hosted) {
+    const ib = $('#btn-install'), hint = $('#install-hint');
+    const ua = navigator.userAgent;
+    const installed = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+    const inApp = /; wv\)|FBAN|FBAV|Instagram|Line\/|GSA\//.test(ua);
+    const ios = /iPhone|iPad|iPod/.test(ua);
+    let promptEvent = null;
+    const say = text => { hint.textContent = text; hint.hidden = false; };
+    if (!installed) {
+      ib.hidden = false;
+      window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); promptEvent = e; hint.hidden = true; });
+      window.addEventListener('appinstalled', () => { ib.hidden = true; say('Installed! Open Script & Sorcery from your home screen.'); });
+      ib.onclick = async () => {
+        sfx('tap');
+        if (promptEvent) {
+          promptEvent.prompt();
+          const r = await promptEvent.userChoice.catch(() => null);
+          if (r && r.outcome === 'accepted') ib.hidden = true;
+          promptEvent = null;
+          return;
+        }
+        if (inApp) say('You are inside another app\'s browser, which cannot install apps. Tap its ⋮ or share menu and choose "Open in Chrome", then tap Install app again.');
+        else if (ios) say('On iPhone: tap the Share button in Safari, then "Add to Home Screen".');
+        else say('In Chrome: tap ⋮ at the top right, then "Add to Home screen" and choose Install. If you only see "Create shortcut", wait a few seconds for the page to finish loading and try again.');
+      };
+    }
   }
 
   /* ---------------- never freeze ---------------- */
