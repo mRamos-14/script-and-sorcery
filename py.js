@@ -936,6 +936,19 @@ const Py = (() => {
   }
 
   /* ---------- program structure ---------- */
+  // how many brackets are still open at the end of a line (strings and comments ignored)
+  function openDepth(src) {
+    let q = null, depth = 0;
+    for (let k = 0; k < src.length; k++) {
+      const c = src[k];
+      if (q) { if (c === '\\') k++; else if (c === q) q = null; continue; }
+      if (c === '"' || c === "'") q = c;
+      else if (c === '#') break;
+      else if ('([{'.includes(c)) depth++;
+      else if (')]}'.includes(c)) depth--;
+    }
+    return depth;
+  }
   // split a line at top-level semicolons (outside strings and brackets)
   function splitSemis(src) {
     if (!src.includes(';')) return [src];
@@ -959,10 +972,16 @@ const Py = (() => {
   }
   function compile(lines) {
     const items = [];
-    lines.forEach((src, i) => {
-      if (!src.trim() || /^\s*#/.test(src)) return;
-      for (const part of splitSemis(src)) items.push({ i, indent: part.match(/^ */)[0].length, src: part });
-    });
+    for (let i = 0; i < lines.length; i++) {
+      let src = lines[i];
+      if (!src.trim() || /^\s*#/.test(src)) continue;
+      // inside open brackets (or after a backslash) the statement goes on to the next line
+      const start = i;
+      while (i + 1 < lines.length && (openDepth(src) > 0 || /\\\s*$/.test(src))) {
+        src = src.replace(/\\\s*$/, '') + ' ' + lines[++i].trim();
+      }
+      for (const part of splitSemis(src)) items.push({ i: start, indent: part.match(/^ */)[0].length, src: part });
+    }
     let pos = 0;
     const parse = it => makeParser(tokenize(it.src, it.i + 1), it.i + 1).statement();
     const synErr = (msg, ln) => new PyError('SyntaxError', msg, ln);

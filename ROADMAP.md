@@ -44,8 +44,8 @@ with fresh values every play.
 | 21 | The Golem Forge | classes and objects | CS50P, MIT, Py4E 14 | ✅ |
 | 22 | The Bloodline Keep | inheritance and dunders | CS50P, MIT | ✅ |
 | 23 | The Clockwork Citadel | properties, classmethods, composition (+ R) | CS50P | ✅ |
-| 24 | The Builder's Yard | stack, queue, linked list, building them with classes | ours, MIT 6.0002 | 🔨 |
-| 25 | The Rootwood | trees, binary search trees, graphs, BFS, DFS, shortest path (+ R) | MIT 6.0002 | 🔨 |
+| 24 | The Builder's Yard | stack, queue, linked list, building them with classes | ours, MIT 6.0002 | ✅ |
+| 25 | The Rootwood | trees, binary search trees, graphs, BFS, DFS, shortest path (+ R) | MIT 6.0002 | ✅ |
 
 ## Act VI · Practical Python
 | 26 | The Great Bazaar | libraries, pip, argparse | CS50P | ✅ |
