@@ -325,7 +325,7 @@ const WORLD41 = {
           hints: ['class Mage: / def __init__(self, powers): / self.powers = powers / def waves(self): / for p in self.powers: / yield p', 'cast(fireball, sum(p for p in Mage([...]).waves()))'],
           solution: ['class Mage:', '    def __init__(self, powers):', '        self.powers = powers', '    def waves(self):', '        for p in self.powers:', '            yield p', 'cast(fireball, sum(p for p in Mage([$(Math.floor(h / 3)), $(Math.floor(h / 3)), $(h - 2 * Math.floor(h / 3))]).waves()))'],
         },
-        { type: 'talk', who: 'gatekeeper', text: 'The gate is open. You walked from print("hello") to classes, libraries, patterns, tests and generators. There is no more map. Go and build something that is yours.' },
+        { type: 'talk', who: 'gatekeeper', text: 'The gate is open. You walked from print("hello") to classes, libraries, patterns, tests and generators. Beyond it lie closures, decorators and the deepest magic of all. Walk on.' },
       ],
       learn: [{ title: 'The whole journey', code: 'values  loops  functions  files  classes\nlibraries  regex  tests  generators', text: 'All of CS50P and the next steps beyond it. You are a Python programmer.' }],
     },

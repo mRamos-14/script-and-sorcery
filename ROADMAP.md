@@ -34,11 +34,11 @@ with fresh values every play.
 | 15 | The Hall of Mirrors | mutable default args, aliasing vs copying (copy/deepcopy), is vs ==, float equality, shadowing built-ins, late binding, `+=` on lists, truthiness, chained comparisons, any/all, Pythonic loops | ours | ✅ |
 
 ## Act IV · Thinking in algorithms
-| 16 | The Spiral Depths | recursion: base case, call stack, factorial, fibonacci, sum of list, palindromes, Towers of Hanoi, recursion vs loops, RecursionError | MIT | 🔨 |
-| 17 | The Guessing Halls | guess-and-check, exhaustive enumeration, approximation, epsilon, bisection search, Newton-Raphson | MIT 3-4 | 🔨 |
-| 18 | The Measuring Tower | counting steps, O(1)/O(log n)/O(n)/O(n log n)/O(n²), linear vs binary search, choosing data structures | MIT 21-23 | 🔨 |
-| 19 | The Sorting Spire | selection, bubble, insertion, merge sort, stability, `sorted` vs `.sort` | MIT 23 | 🔨 |
-| 20 | The Memory Vaults | memoization, dynamic programming, knapsack, coin change, grid paths (+ R) | MIT 6.0002 | 🔨 |
+| 16 | The Spiral Depths | recursion: base case, call stack, factorial, fibonacci, sum of list, palindromes, Towers of Hanoi, recursion vs loops, RecursionError | MIT | ✅ |
+| 17 | The Guessing Halls | guess-and-check, exhaustive enumeration, approximation, epsilon, bisection search, Newton-Raphson | MIT 3-4 | ✅ |
+| 18 | The Measuring Tower | counting steps, O(1)/O(log n)/O(n)/O(n log n)/O(n²), linear vs binary search, choosing data structures | MIT 21-23 | ✅ |
+| 19 | The Sorting Spire | selection, bubble, insertion, merge sort, stability, `sorted` vs `.sort` | MIT 23 | ✅ |
+| 20 | The Memory Vaults | memoization, dynamic programming, knapsack, coin change, grid paths (+ R) | MIT 6.0002 | ✅ |
 
 ## Act V · Objects
 | 21 | The Golem Forge | classes and objects | CS50P, MIT, Py4E 14 | ✅ |

@@ -14,7 +14,8 @@ const Py = (() => {
   class Signal { constructor(kind, value) { this.kind = kind; this.value = value; } }
 
   const V = {
-    int: n => ({ t: 'int', v: n }),
+    // whole numbers past 2**53 cannot be exact here (real Python's are unlimited), so say so instead of being wrong
+    int: n => { if (!Number.isSafeInteger(n) && Number.isFinite(n) && Number.isInteger(n)) throw new PyError('OverflowError', 'numbers this big are beyond this spellbook (past 9007199254740991)'); return { t: 'int', v: n }; },
     float: n => ({ t: 'float', v: n }),
     str: s => ({ t: 'str', v: s }),
     bool: b => ({ t: 'bool', v: !!b }),
