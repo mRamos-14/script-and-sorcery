@@ -16,7 +16,7 @@ with fresh values every play.
 | 1 | Starter Village | print, variables, input | CS50P | ✅ |
 | 2 | The Counting House | int and float, + - * /, //, %, **, precedence, round, abs, int()/float()/str(), float precision, math.floor/ceil | Py4E 2, MIT 1-2, CS50P 0 | ✅ |
 | 3 | Whispering Library | string methods, f-strings | CS50P 0 | ✅ |
-| 4 | The Scriptorium | indexing, negative indexes, slicing with steps, `in`, find/rfind, split/join, parsing a line (`From x@y.org Sat Jan 5`), strings are immutable | Py4E 6 | 🔨 |
+| 4 | The Scriptorium | indexing, negative indexes, slicing with steps, `in`, find/rfind, split/join, parsing a line (`From x@y.org Sat Jan 5`), strings are immutable | Py4E 6 | ✅ |
 | 5 | Crossroads Forest | if/elif/else, and/or/not, match (+ R) | CS50P 1 | ✅ |
 | 6 | Echo Caves | for, while, range, break/continue | CS50P 2, Py4E 5 | ✅ |
 
