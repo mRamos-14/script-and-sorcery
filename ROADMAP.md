@@ -28,7 +28,7 @@ with fresh values every play.
 
 ## Act III · Functions, errors and files
 | 11 | Mage Tower | functions | CS50P, MIT | ✅ |
-| 12 | The Hall of Echoes | scope (LEGB), local vs global, nonlocal, docstrings, pure functions vs side effects, functions as values, returning None | MIT 5-6 | 🔨 |
+| 12 | The Hall of Echoes | scope (LEGB), local vs global, nonlocal, docstrings, pure functions vs side effects, functions as values, returning None | MIT 5-6 | ✅ |
 | 13 | Trap Dungeon | errors and try/except | CS50P | ✅ |
 | 14 | The Ancient Archive | files, csv (+ R) | CS50P, Py4E 7 | ✅ |
 | 15 | The Hall of Mirrors | mutable default args, aliasing vs copying (copy/deepcopy), is vs ==, float equality, shadowing built-ins, late binding, `+=` on lists, truthiness, chained comparisons, any/all, Pythonic loops | ours | 🔨 |
