@@ -620,13 +620,13 @@ const Py = (() => {
       // x: int = 5  (a type hint, ignored when running)
       if (t0.k === 'name' && toks[1] && toks[1].k === 'op' && toks[1].v === ':') {
         p = 2;
-        expr();
-        if (p >= toks.length) return { n: 'pass', hint: true };
+        const ann = expr();
+        if (p >= toks.length) return { n: 'annot', name: t0.v, ann };
         if (!isOp('=')) fail();
         p++;
         const e = exprList();
         if (p < toks.length) fail();
-        return { n: 'assign', targets: [{ n: 'name', name: t0.v }], e };
+        return { n: 'assign', targets: [{ n: 'name', name: t0.v }], e, ann };
       }
       // find top-level = or augmented assignment
       let depth = 0;
@@ -1632,13 +1632,15 @@ const Py = (() => {
         if (ca) return fromClass(ca, obj, obj.cls);
         if (obj.cls.exc && name === 'args') return V.tuple(obj.args);
         if (obj.cls.exc && name === '__cause__') return obj.cause || V.none;
+        if (obj.cls.exc && name === '__context__') return obj.context || V.none;
+        if (obj.cls.exc && name === '__traceback__') return V.none;
         const ga = classAttr(obj.cls, '__getattr__');
         if (ga) return userCall(ga, [obj, V.str(name)]);
         throw new PyError('AttributeError', `'${obj.cls.name}' object has no attribute '${name}'`);
       }
       case 'class': {
         if (name === '__name__' || name === '__qualname__') return V.str(obj.name);
-        if (name === '__mro__') return V.tuple([...obj.mro, { t: 'type', v: 'object' }]);
+        if (name === '__mro__') return V.tuple([...obj.mro, ...(obj.excBase ? excChain(obj.excBase).map(n => ({ t: 'exctype', v: n })) : []), { t: 'type', v: 'object' }]);
         if (name === '__bases__') return V.tuple(obj.bases);
         const ca = classAttr(obj, name);
         if (ca) return ca.t === 'property' ? ca : fromClass(ca, null, obj);
@@ -1668,6 +1670,18 @@ const Py = (() => {
         if (name === '__name__') return V.str(obj.name);
         if (name === '__qualname__') return V.str(obj.qualname || obj.name);
         if (name === '__doc__') return obj.doc ? V.str(obj.doc) : V.none;
+        if (name === '__closure__') {
+          const used = new Set();
+          const walk = n => { if (!n || typeof n !== 'object') return; if (Array.isArray(n)) { n.forEach(walk); return; } if (n.n === 'name' && n.name) used.add(n.name); for (const v of Object.values(n)) if (v && typeof v === 'object') walk(v); };
+          walk(obj.body);
+          const own = new Set([...obj.params.map(p => p.name), ...(obj.locals ? [...obj.locals] : [])]);
+          const cells = [];
+          for (const nm of [...used].sort()) {
+            if (own.has(nm)) continue;
+            for (let sc = obj.closure; sc && sc.parent; sc = sc.parent) if ((sc.fn || sc.comp) && Object.prototype.hasOwnProperty.call(sc.vars, nm)) { cells.push(mkObj('cell', { cell_contents: sc.vars[nm] })); break; }
+          }
+          return cells.length ? V.tuple(cells) : V.none;
+        }
         if (obj.attrs && obj.attrs.has(name)) return obj.attrs.get(name);
         throw none();
       case 'boundmethod':
@@ -1683,6 +1697,7 @@ const Py = (() => {
       case 'exception':
         if (name === 'args') return V.tuple(obj.args || (obj.msg === '' ? [] : [V.str(obj.msg)]));
         if (name === '__cause__') return obj.cause || V.none;
+        if (name === '__context__') return obj.context || V.none;
         break;
       case 'type':
         if (name === '__name__') return V.str(obj.v);
@@ -2908,6 +2923,7 @@ const Py = (() => {
       case 'pass': ctx.trace.push({ kind: 'step', line: s.line, env: snapshot(scope) }); return;
       case 'assign': {
         const val = evalE(s.e, scope, ctx);
+        if (s.ann && (scope.isClass || !scope.fn)) (scope.annotations || (scope.annotations = [])).push([s.targets[0].name, evalE(s.ann, scope, ctx)]);
         let name = null;
         for (const t of s.targets) name = bindTarget(t, val, scope, ctx) || name;
         ctx.trace.push({ kind: 'assign', line: s.line, name, env: snapshot(scope) });
@@ -3008,10 +3024,15 @@ const Py = (() => {
         const bases = s.bases.map(b => evalE(b, scope, ctx));
         const cscope = { vars: {}, parent: scope, fn: false, locals: new Set(), isClass: true, clsName: s.name };
         execBlock(s.body, cscope, ctx);
+        if (cscope.annotations) { const d = dict(); for (const [k, v] of cscope.annotations) d.v.set(keyOf(V.str(k)), [V.str(k), v]); cscope.vars.__annotations__ = d; }
         let cls = makeClass(s.name, bases, cscope.vars);
         for (const d of s.decos.slice().reverse()) cls = callValue(evalE(d.e, scope, ctx), [cls], {}, ctx);
         bindName(scope, s.name, cls);
         ctx.trace.push({ kind: 'step', line: s.line, env: snapshot(scope) });
+        return;
+      }
+      case 'annot': {
+        if (scope.isClass || !scope.fn) (scope.annotations || (scope.annotations = [])).push([s.name, evalE(s.ann, scope, ctx)]);
         return;
       }
       case 'return': {
@@ -3053,6 +3074,8 @@ const Py = (() => {
         }
         const x = evalE(s.e, scope, ctx);
         const err = raiseValue(x);
+        const handling = ctx.excStack && ctx.excStack[ctx.excStack.length - 1];
+        if (handling && err.obj && handling.obj !== err.obj && !err.obj.context) err.obj.context = handling.obj || makeException(handling.pyType, [V.str(handling.message)]);
         if (s.cause) {
           let c = evalE(s.cause, scope, ctx);
           if (c.t === 'exctype') c = makeException(c.v, []);
