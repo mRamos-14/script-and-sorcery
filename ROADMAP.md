@@ -74,8 +74,8 @@ with fresh values every play.
 | 45 | The Court of Exceptions | custom exceptions, hierarchies, raise from | ours, CS50P | ✅ |
 | 46 | The Collector's Hoard | Counter, defaultdict, namedtuple, deque | ours | ✅ |
 | 47 | The Archetype Forge | dataclasses, Enum | ours | ✅ |
-| 48 | The Loom of Fate | itertools | ours | 🔨 |
-| 49 | The Alchemist's Tools | functools: reduce, partial, lru_cache (+ R) | ours | 🔨 |
+| 48 | The Loom of Fate | itertools | ours | ✅ |
+| 49 | The Alchemist's Tools | functools: reduce, partial, lru_cache (+ R) | ours | ✅ |
 
 ## Act IX · Mastery
 | 50 | The Gauntlet | capstone projects: arithmetic formatter, budget app, text adventure, grade book | Py4E, fCC, ours | 🔨 |

@@ -1832,12 +1832,58 @@ const Py = (() => {
   function needStr(meth, x) { if (x.t !== 'str') throw new PyError('TypeError', `${meth}() argument must be str, not ${typeName(x)}`); }
   function needInt(x) { if (x.t !== 'int' && x.t !== 'bool') throw new PyError('TypeError', `'${typeName(x)}' object cannot be interpreted as an integer`); return num(x); }
   function noKw(name, kw) { if (Object.keys(kw || {}).length) throw new PyError('TypeError', `${name}() takes no keyword arguments`); }
+  /* CPython's list.sort (listobject.c): stable, uses only <, and for lists under 64 items makes
+     exactly the same comparisons in the same order (count_run, then binary insertion), which
+     shows when __lt__ prints or a comparison is inconsistent. Longer lists use a stable merge. */
   function sortList(arr, reverse, key) {
-    const keyed = arr.map(x => ({ x, k: key && key.t !== 'NoneType' ? callValue(key, [x], {}, CUR) : x }));
-    const cmp = (a, b) => (less(a.k, b.k, '<') ? -1 : less(b.k, a.k, '<') ? 1 : 0);
-    // Python's reverse keeps equal items in their original order
-    if (reverse) keyed.sort((a, b) => cmp(b, a)); else keyed.sort(cmp);
-    return keyed.map(e => e.x);
+    const K = arr.map(x => (key && key.t !== 'NoneType' ? callValue(key, [x], {}, CUR) : x));
+    const Vs = arr.slice();
+    // reverse=True: reverse, sort forward (stable), reverse back, so equal items keep their order
+    if (reverse) { K.reverse(); Vs.reverse(); }
+    const lt = (a, b) => less(a, b, '<');
+    const N = K.length;
+    const rev = (lo, hi) => { for (let i = lo, j = hi - 1; i < j; i++, j--) { [K[i], K[j]] = [K[j], K[i]]; [Vs[i], Vs[j]] = [Vs[j], Vs[i]]; } };
+    if (N >= 2 && N < 64) {
+      let n = 1;
+      for (; n < N; n++) if (lt(K[n], K[n - 1])) break;
+      if (n < N) {
+        let desc = true;
+        if (n > 1) { if (lt(K[0], K[n - 1])) desc = false; else rev(0, n); }
+        if (desc) {
+          n++;
+          let neq = 0;
+          const revNeq = () => { if (neq) { neq++; rev(n - neq, n); neq = 0; } };
+          for (; n < N; n++) {
+            if (lt(K[n], K[n - 1])) revNeq();
+            else if (lt(K[n - 1], K[n])) break;
+            else neq++;
+          }
+          revNeq();
+          rev(0, n);
+          for (; n < N; n++) if (lt(K[n], K[n - 1])) break;
+        }
+      }
+      for (let ok = n; ok < N; ok++) {
+        let L = 0, R = ok;
+        const pk = K[ok], pv = Vs[ok];
+        do { const M = (L + R) >> 1; if (lt(pk, K[M])) R = M; else L = M + 1; } while (L < R);
+        for (let M = ok; M > L; M--) { K[M] = K[M - 1]; Vs[M] = Vs[M - 1]; }
+        K[L] = pk; Vs[L] = pv;
+      }
+    } else if (N >= 64) {
+      const idx = K.map((_, i) => i);
+      const merge = (a) => {
+        if (a.length < 2) return a;
+        const m = a.length >> 1, l = merge(a.slice(0, m)), r = merge(a.slice(m)), out = [];
+        let i = 0, j = 0;
+        while (i < l.length && j < r.length) out.push(lt(K[r[j]], K[l[i]]) ? r[j++] : l[i++]);
+        return out.concat(l.slice(i), r.slice(j));
+      };
+      const order = merge(idx), K2 = order.map(i => K[i]), V2 = order.map(i => Vs[i]);
+      K.splice(0, N, ...K2); Vs.splice(0, N, ...V2);
+    }
+    if (reverse) Vs.reverse();
+    return Vs;
   }
   function roundHalfEven(x) {
     const f = Math.floor(x), d = x - f;
