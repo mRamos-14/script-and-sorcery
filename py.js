@@ -2758,6 +2758,7 @@ const Py = (() => {
   function bindTarget(t, val, scope, ctx) {
     if (t.n === 'name') {
       if (RESERVED.includes(t.name) || SPELLS.includes(t.name)) throw new PyError('SyntaxError', `"${t.name}" is a spell word in this game, pick another name`);
+      if (val && val.t === 'file') val.held = true;
       homeOf(t.name, scope).vars[t.name] = val;
       return t.name;
     }
@@ -2842,7 +2843,7 @@ const Py = (() => {
       ctx.emit = ev => ctx.trace.push({ ...ev, line: s.line });
       const v = evalE(item.e, scope, ctx);
       let entered = v;
-      if (v.t === 'file') ctx.trace.push({ kind: 'cond', line: s.line, value: true, label: `opened ${v.name}` });
+      if (v.t === 'file') { v.held = true; ctx.trace.push({ kind: 'cond', line: s.line, value: true, label: `opened ${v.name}` }); }
       else if (v.t === 'instance' && classAttr(v.cls, '__enter__') && classAttr(v.cls, '__exit__')) entered = userCall(classAttr(v.cls, '__enter__'), [v]);
       else if (v.t === 'object' && v.kind === 'raises') entered = v;
       else throw new PyError('TypeError', `'${typeName(v)}' object does not support the context manager protocol`);
@@ -2883,6 +2884,7 @@ const Py = (() => {
       ctx.emit = ev => ctx.trace.push({ ...ev, line: s.line });
       try {
         execStmt(s, scope, ctx);
+        if (ctx.openFiles) for (const fl of ctx.openFiles) if (!fl.held && fl.pending) flushFile(fl, ctx);
       } catch (err) {
         throw lineErr(err, s.line);
       }
