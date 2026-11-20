@@ -26,11 +26,11 @@ const Py = (() => {
   const dict = () => ({ t: 'dict', v: new Map() });
 
   const SPELLS = ['fireball', 'spark', 'icebolt'];
-  const BUILTINS = ['format', 'bin', 'hex', 'oct', 'print', 'len', 'cast', 'range', 'sum', 'max', 'min', 'sorted', 'abs', 'round', 'enumerate', 'open', 'input', 'isinstance', 'issubclass', 'hasattr', 'getattr', 'setattr', 'iter', 'next', 'zip', 'map', 'filter', 'any', 'all', 'reversed', 'chr', 'ord', 'divmod', 'pow', 'super', 'property', 'classmethod', 'staticmethod', 'callable', 'repr', 'vars'];
+  const BUILTINS = ['format', 'bin', 'hex', 'oct', 'print', 'len', 'cast', 'range', 'sum', 'max', 'min', 'sorted', 'abs', 'round', 'enumerate', 'open', 'input', 'isinstance', 'issubclass', 'hasattr', 'getattr', 'setattr', 'iter', 'next', 'zip', 'map', 'filter', 'any', 'all', 'reversed', 'chr', 'ord', 'divmod', 'pow', 'super', 'property', 'classmethod', 'staticmethod', 'callable', 'repr', 'vars', 'hash', 'id'];
   // names that are classes in Python: calling them converts, type() returns them
   const TYPES = ['int', 'str', 'float', 'bool', 'list', 'tuple', 'dict', 'set', 'frozenset', 'type', 'object'];
-  const EXC = ['BaseException', 'Exception', 'ValueError', 'TypeError', 'NameError', 'IndexError', 'KeyError', 'ZeroDivisionError', 'AttributeError', 'RecursionError', 'ArithmeticError', 'LookupError', 'RuntimeError', 'UnboundLocalError', 'OSError', 'FileNotFoundError', 'UnsupportedOperation', 'AssertionError', 'StopIteration', 'ImportError', 'ModuleNotFoundError', 'SystemExit', 'EOFError', 'NotImplementedError', 'PatternError', 'JSONDecodeError', 'OverflowError', 'StatisticsError', 'Failed', 'ConnectionError'];
-  const EXC_PARENT = { Exception: 'BaseException', SystemExit: 'BaseException', ZeroDivisionError: 'ArithmeticError', OverflowError: 'ArithmeticError', IndexError: 'LookupError', KeyError: 'LookupError', RecursionError: 'RuntimeError', NotImplementedError: 'RuntimeError', UnboundLocalError: 'NameError', FileNotFoundError: 'OSError', UnsupportedOperation: 'OSError', ModuleNotFoundError: 'ImportError', JSONDecodeError: 'ValueError', StatisticsError: 'ValueError', Failed: 'BaseException', ConnectionError: 'OSError' };
+  const EXC = ['FrozenInstanceError', 'BaseException', 'Exception', 'ValueError', 'TypeError', 'NameError', 'IndexError', 'KeyError', 'ZeroDivisionError', 'AttributeError', 'RecursionError', 'ArithmeticError', 'LookupError', 'RuntimeError', 'UnboundLocalError', 'OSError', 'FileNotFoundError', 'UnsupportedOperation', 'AssertionError', 'StopIteration', 'ImportError', 'ModuleNotFoundError', 'SystemExit', 'EOFError', 'NotImplementedError', 'PatternError', 'JSONDecodeError', 'OverflowError', 'StatisticsError', 'Failed', 'ConnectionError'];
+  const EXC_PARENT = { FrozenInstanceError: 'AttributeError', Exception: 'BaseException', SystemExit: 'BaseException', ZeroDivisionError: 'ArithmeticError', OverflowError: 'ArithmeticError', IndexError: 'LookupError', KeyError: 'LookupError', RecursionError: 'RuntimeError', NotImplementedError: 'RuntimeError', UnboundLocalError: 'NameError', FileNotFoundError: 'OSError', UnsupportedOperation: 'OSError', ModuleNotFoundError: 'ImportError', JSONDecodeError: 'ValueError', StatisticsError: 'ValueError', Failed: 'BaseException', ConnectionError: 'OSError' };
   const excParent = c => (c === 'BaseException' ? null : EXC_PARENT[c] || 'Exception');
   const KEYWORDS = ['if', 'elif', 'else', 'and', 'or', 'not', 'in', 'is', 'True', 'False', 'None', 'for', 'while', 'def', 'return', 'class', 'import', 'from', 'pass', 'break', 'continue', 'lambda', 'with', 'try', 'except', 'finally', 'raise', 'del', 'as', 'global', 'nonlocal', 'yield', 'assert'];
   const LATER = [];
@@ -84,6 +84,7 @@ const Py = (() => {
     return x.frozen ? `frozenset(${body})` : body;
   }
   function repr(x) {
+    if (x.sub) return x.sub.repr(x);
     switch (x.t) {
       case 'str': return strRepr(x.v);
       case 'list': return '[' + x.v.map(repr).join(', ') + ']';
@@ -112,9 +113,9 @@ const Py = (() => {
       case 'function': return `<function ${x.qualname || x.name}${ADDR}>`;
       case 'boundmethod': return `<bound method ${x.fn.qualname || x.fn.name} of ${SAFE ? x.self.cls ? x.self.cls.name : typeName(x.self) : repr(x.self)}>`;
       case 'range': return `range(${x.start}, ${x.stop}${x.step !== 1 ? ', ' + x.step : ''})`;
-      case 'type': return `<class '${x.v}'>`;
+      case 'type': return x.spec ? `<class '${x.spec.mod}.${x.v}'>` : `<class '${x.v}'>`;
       case 'exctype': return `<class '${x.v}'>`;
-      case 'class': return `<class '__main__.${x.name}'>`;
+      case 'class': return x.enumMembers || x.enumBase ? `<enum '${x.name}'>` : `<class '__main__.${x.name}'>`;
       case 'module': return `<module '${x.name}'${x.builtin ? ' (built-in)' : ''}>`;
       case 'generator': return `<generator object ${x.name}${ADDR}>`;
       case 'iterator': return `<${x.kind} object${ADDR}>`;
@@ -137,7 +138,7 @@ const Py = (() => {
     }
   }
   function show(x) { return x.t === 'str' ? `"${x.v}"` : repr(x); }
-  const typeName = x => (x.t === 'set' && x.frozen ? 'frozenset' : x.t === 'exctype' || x.t === 'class' ? 'type' : x.t === 'exception' ? x.cls : x.t === 'file' ? '_io.TextIOWrapper' : x.t === 'instance' ? x.cls.name : x.t === 'builtin' || x.t === 'native' ? 'builtin_function_or_method' : x.t === 'boundmethod' ? 'method' : x.t === 'match' ? 're.Match' : x.t === 'iterator' ? x.kind : x.t);
+  const typeName = x => (x.sub ? x.sub.tp || x.sub.name : x.tn ? x.tn : x.t === 'set' && x.frozen ? 'frozenset' : x.t === 'exctype' || x.t === 'class' ? 'type' : x.t === 'exception' ? x.cls : x.t === 'file' ? '_io.TextIOWrapper' : x.t === 'instance' ? x.cls.name : x.t === 'builtin' || x.t === 'native' ? 'builtin_function_or_method' : x.t === 'boundmethod' ? 'method' : x.t === 'match' ? 're.Match' : x.t === 'iterator' ? x.kind : x.t);
 
   /* ---------- tokens ---------- */
   const OPS3 = ['**=', '//=', '...'];
@@ -1303,6 +1304,7 @@ const Py = (() => {
       case 'range': { let i = 0; const n = rangeLen(x); return { next: () => (i < n ? V.int(x.start + (i++) * x.step) : DONE) }; }
       case 'file': needRead(x); return { next: () => { needRead(x); const s = readLine(x); return s ? V.str(s) : DONE; } };
       case 'generator': case 'iterator': return x;
+      case 'class': if (x.enumMembers) { const ms = x.enumMembers; let i = 0; return { next: () => (i < ms.length ? ms[i++] : DONE) }; } break;
       case 'instance': {
         const it = classAttr(x.cls, '__iter__');
         if (it) {
@@ -1394,6 +1396,7 @@ const Py = (() => {
       return b.v.includes(a.v);
     }
     if (b.t === 'dict' || b.t === 'set') return b.v.has(keyOf(a));
+    if (b.t === 'class' && b.enumMembers) return b.enumMembers.includes(a) || b.enumMembers.some(m => equal(m.attrs.get('_value_'), a));
     if (b.t === 'range') return (a.t === 'int' || a.t === 'bool') && iterate(b).some(x => x.v === num(a));
     if (['list', 'tuple', 'dict_keys', 'dict_values', 'dict_items'].includes(b.t)) return b.v.some(x => identical(x, a) || equal(x, a));
     if (b.t === 'instance') {
@@ -1472,6 +1475,7 @@ const Py = (() => {
   }
   const BIN_DUNDER = { '+': 'add', '-': 'sub', '*': 'mul', '/': 'truediv', '//': 'floordiv', '%': 'mod', '**': 'pow', '@': 'matmul', '&': 'and', '|': 'or', '^': 'xor' };
   function binop(op, a, b, inplace) {
+    if ((a.sub && a.sub.ops) || (b.sub && b.sub.ops)) { const sp = a.sub && a.sub.ops ? a.sub : b.sub; const r = sp.ops(op, a, b); if (r) return r; }
     if (a.t === 'instance' || b.t === 'instance') {
       const nm = BIN_DUNDER[op];
       if (inplace && a.t === 'instance') { const m = classAttr(a.cls, `__i${nm}__`); if (m) { const r = userCall(m, [a, b]); if (r !== NOTIMPL) return r; } }
@@ -1608,7 +1612,7 @@ const Py = (() => {
   }
   const bind = (fn, self) => ({ t: 'boundmethod', fn, self });
   function fromClass(v, obj, cls) {
-    if (v.t === 'function' || v.t === 'native') return obj ? bind(v, obj) : v;
+    if (v.t === 'function' || v.t === 'native' || (v.t === 'object' && v.bindable)) return obj ? bind(v, obj) : v;
     if (v.t === 'classmethod') return bind(v.fn, cls);
     if (v.t === 'staticmethod') return v.fn;
     if (v.t === 'property' && obj) return userCall(v.fget, [obj]);
@@ -1619,6 +1623,12 @@ const Py = (() => {
   const TYPE_METHODS = { str: STR_METHODS, list: LIST_METHODS, dict: DICT_METHODS, set: SET_METHODS };
   function getAttr(obj, name, ctx) {
     const none = () => new PyError('AttributeError', `'${typeName(obj)}' object has no attribute '${name}'`);
+    if (obj.sub) {
+      const a = obj.sub.attr && obj.sub.attr(obj, name);
+      if (a !== undefined) return a;
+      if (obj.sub.methods && obj.sub.methods[name]) return { t: 'method', v: name, on: typeName(obj), obj };
+      if (obj.sub.deny && obj.sub.deny.includes(name)) throw none();
+    }
     switch (obj.t) {
       case 'instance': {
         if (name === '__class__') return obj.cls;
@@ -1633,6 +1643,7 @@ const Py = (() => {
         if (obj.cls.exc && name === 'args') return V.tuple(obj.args);
         if (obj.cls.exc && name === '__cause__') return obj.cause || V.none;
         if (obj.cls.exc && name === '__context__') return obj.context || V.none;
+        if (obj.cls.exc && name === '__suppress_context__') return V.bool(!!obj.suppress);
         if (obj.cls.exc && name === '__traceback__') return V.none;
         const ga = classAttr(obj.cls, '__getattr__');
         if (ga) return userCall(ga, [obj, V.str(name)]);
@@ -1698,9 +1709,11 @@ const Py = (() => {
         if (name === 'args') return V.tuple(obj.args || (obj.msg === '' ? [] : [V.str(obj.msg)]));
         if (name === '__cause__') return obj.cause || V.none;
         if (name === '__context__') return obj.context || V.none;
+        if (name === '__suppress_context__') return V.bool(!!obj.suppress);
         break;
       case 'type':
         if (name === '__name__') return V.str(obj.v);
+        if (obj.spec) { const r = obj.spec.typeAttr && obj.spec.typeAttr(name); if (r !== undefined) return r; throw new PyError('AttributeError', `type object '${obj.v}' has no attribute '${name}'`); }
         if (TYPE_METHODS[obj.v] && TYPE_METHODS[obj.v].includes(name)) return nat(name, (args, kw) => { if (!args.length) throw new PyError('TypeError', `unbound method ${obj.v}.${name}() needs an argument`); return callMethod(args[0], name, args.slice(1), kw, CUR); });
         if (obj.v === 'dict' && name === 'fromkeys') return nat(name, ([ks, v]) => { const d = dict(); for (const k of iterate(ks)) d.v.set(keyOf(k), [k, v || V.none]); return d; });
         break;
@@ -1720,6 +1733,7 @@ const Py = (() => {
   }
   function setAttr(obj, name, val) {
     if (obj.t === 'instance') {
+      if (obj.cls.mro.some(c => c.dcFrozen)) throw new PyError('FrozenInstanceError', `cannot assign to field '${name}'`);
       const ca = classAttr(obj.cls, name);
       if (ca && ca.t === 'property') {
         if (!ca.fset) throw new PyError('AttributeError', `property '${name}' of '${obj.cls.name}' object has no setter`);
@@ -1730,11 +1744,13 @@ const Py = (() => {
       return;
     }
     if (obj.t === 'class') { obj.dict.set(name, val); return; }
+    if (obj.t === 'tuple' && obj.sub) throw new PyError('AttributeError', "can't set attribute");
     if (obj.t === 'function') { (obj.attrs = obj.attrs || new Map()).set(name, val); return; }
     if (obj.t === 'module') { obj.members.set(name, val); return; }
     throw new PyError('AttributeError', `'${typeName(obj)}' object has no attribute '${name}' and no __dict__ for setting new attributes`);
   }
   function delAttr(obj, name) {
+    if (obj.t === 'instance' && obj.cls.mro.some(c => c.dcFrozen)) throw new PyError('FrozenInstanceError', `cannot delete field '${name}'`);
     if (obj.t === 'instance' && obj.attrs.has(name)) { obj.attrs.delete(name); return; }
     if (obj.t === 'class' && obj.dict.has(name)) { obj.dict.delete(name); return; }
     throw new PyError('AttributeError', obj.t === 'instance' ? `'${obj.cls.name}' object has no attribute '${name}'` : `'${typeName(obj)}' object has no attribute '${name}'`);
@@ -1747,6 +1763,7 @@ const Py = (() => {
       return x.t === 'instance' && x.cls.exc && excChain(x.cls.excBase).includes(C.v);
     }
     if (C.t === 'type') {
+      if (C.spec) return x.sub === C.spec;
       if (C.v === 'object') return true;
       if (C.v === 'int') return x.t === 'int' || x.t === 'bool';
       if (C.v === 'type') return ['class', 'type', 'exctype'].includes(x.t);
@@ -1755,12 +1772,14 @@ const Py = (() => {
     throw new PyError('TypeError', 'isinstance() arg 2 must be a type, a tuple of types, or a union');
   }
   function typeOf(x) {
+    if (x.sub) return x.sub.type;
     if (x.t === 'instance') return x.cls;
     if (x.t === 'exception') return { t: 'exctype', v: x.cls };
     if (x.t === 'class' || x.t === 'exctype') return { t: 'type', v: 'type' };
     return { t: 'type', v: typeName(x) };
   }
   function lenOf(a) {
+    if (a.t === 'class' && a.enumMembers) return a.enumMembers.length;
     if (a.t === 'str') return [...a.v].length;
     if (a.t === 'dict' || a.t === 'set') return a.v.size;
     if (a.t === 'range') return rangeLen(a);
@@ -1838,6 +1857,12 @@ const Py = (() => {
   }
 
   function callMethod(obj, name, args, kw, ctx) {
+    if (obj.sub) {
+      const m = obj.sub.methods && obj.sub.methods[name];
+      if (m) return m(obj, args, kw || {}, ctx);
+      if (obj.sub.deny && obj.sub.deny.includes(name)) throw new PyError('AttributeError', `'${typeName(obj)}' object has no attribute '${name}'`);
+      if (obj.sub.attr) { const a = obj.sub.attr(obj, name); if (a !== undefined) return callValue(a, args, kw, ctx); }
+    }
     if (obj.t === 'tuple' && (name === 'count' || name === 'index')) {
       noKw(name, kw); argCount(name, args, 1);
       if (name === 'count') return V.int(obj.v.filter(x => equal(x, args[0])).length);
@@ -2065,6 +2090,7 @@ const Py = (() => {
 
   // int(), str(), list()... are classes in Python; calling one converts
   function callType(name, args, kw, ctx) {
+    if (name === 'int' && kw.base && args.length === 1) { args = [args[0], kw.base]; kw = {}; }
     if (name !== 'dict') noKw(name, kw);
     switch (name) {
       case 'str': argCount(name, args, 0, 1); return V.str(args.length ? fmt(args[0]) : '');
@@ -2279,7 +2305,16 @@ const Py = (() => {
       }
       case 'setattr': argCount(name, args, 3); needStr('setattr', args[1]); setAttr(args[0], args[1].v, args[2]); return V.none;
       case 'vars': argCount(name, args, 1); return getAttr(args[0], '__dict__', ctx);
-      case 'callable': argCount(name, args, 1); return V.bool(['builtin', 'native', 'function', 'boundmethod', 'class', 'type', 'exctype', 'method'].includes(args[0].t) || (args[0].t === 'instance' && !!classAttr(args[0].cls, '__call__')));
+      case 'hash': {
+        argCount(name, args, 1);
+        const x = args[0];
+        if (x.t === 'int' || x.t === 'bool') return V.int(num(x) === -1 ? -2 : num(x));
+        if (x.t === 'float' && Number.isInteger(x.v)) return V.int(x.v === -1 ? -2 : x.v);
+        if (x.t === 'instance') { const h = classAttr(x.cls, '__hash__'); if (h && h.t !== 'NoneType') return userCall(h, [x]); }
+        return V.int(strHash(keyOf(x)));
+      }
+      case 'id': argCount(name, args, 1); return V.int(140000000000 + oid(args[0]) * 16);
+      case 'callable': argCount(name, args, 1); return V.bool((args[0].t === 'object' && !!args[0].call) || ['builtin', 'native', 'function', 'boundmethod', 'class', 'type', 'exctype', 'method'].includes(args[0].t) || (args[0].t === 'instance' && !!classAttr(args[0].cls, '__call__')));
       case 'chr': argCount(name, args, 1); return V.str(String.fromCodePoint(needInt(args[0])));
       case 'ord': argCount(name, args, 1); if (args[0].t !== 'str' || [...args[0].v].length !== 1) throw new PyError('TypeError', `ord() expected a character, but string of length ${args[0].t === 'str' ? args[0].v.length : 0} found`); return V.int(args[0].v.codePointAt(0));
       case 'format': argCount(name, args, 1, 2); if (args[1] && args[1].t !== 'str') throw new PyError('TypeError', 'format() argument 2 must be str'); return V.str(formatSpec(args[0], args[1] ? args[1].v : ''));
@@ -2317,10 +2352,11 @@ const Py = (() => {
     kw = kw || {};
     switch (fn.t) {
       case 'builtin': return callBuiltin(fn.v, args, kw, ctx);
-      case 'type': return callType(fn.v, args, kw, ctx);
+      case 'type': return fn.spec ? fn.spec.make(args, kw, ctx) : callType(fn.v, args, kw, ctx);
       case 'function': return callFunction(fn, args, kw, ctx);
       case 'boundmethod': return callValue(fn.fn, [fn.self, ...args], kw, ctx);
-      case 'class': return makeInstance(fn, args, kw, ctx);
+      case 'class': return fn.enumMembers ? enumLookup(fn, args[0]) : makeInstance(fn, args, kw, ctx);
+      case 'object': if (fn.call) return fn.call(args, kw, ctx); break;
       case 'native':
         try { return fn.fn(args, kw, ctx); }
         catch (e) {
@@ -2396,16 +2432,23 @@ const Py = (() => {
   function makeGenerator(fn, scope, ctx) {
     const g = { t: 'generator', name: fn.name, done: false, running: false };
     let it = null;
+    g.throw = err => {
+      if (g.done || !it) { g.done = true; throw err; }
+      return resume(() => it.throw(err));
+    };
     g.next = () => {
       if (g.done) return DONE;
-      if (g.running) throw new PyError('ValueError', 'generator already executing');
       if (!it) it = genBody(fn, scope, ctx);
+      return resume(() => it.next());
+    };
+    const resume = step => {
+      if (g.running) throw new PyError('ValueError', 'generator already executing');
       const savedEmit = ctx.emit;
       g.running = true;
       ctx.depth++;
       try {
         if (ctx.depth > MAX_DEPTH) throw new PyError('RecursionError', 'maximum recursion depth exceeded');
-        const r = it.next();
+        const r = step();
         if (r.done) { g.done = true; return DONE; }
         return r.value;
       } catch (e) {
@@ -2711,6 +2754,7 @@ const Py = (() => {
       case 'index': return getItem(evalE(e.obj, scope, ctx), evalE(e.i, scope, ctx));
       case 'slice': {
         const obj = evalE(e.obj, scope, ctx);
+        if (obj.sub === DEQUE) throw new PyError('TypeError', "sequence index must be integer, not 'slice'");
         const seq = obj.t === 'str' ? [...obj.v] : isSeq(obj) ? obj.v : null;
         if (!seq) throw new PyError('TypeError', `'${typeName(obj)}' object is not subscriptable`);
         const n = seq.length;
@@ -2737,7 +2781,7 @@ const Py = (() => {
   function getItem(obj, i) {
     if (obj.t === 'dict') {
       const e = obj.v.get(keyOf(i));
-      if (!e) throw keyErr(i);
+      if (!e) { if (obj.sub && obj.sub.missing) return obj.sub.missing(obj, i); throw keyErr(i); }
       return e[1];
     }
     if (obj.t === 'instance') {
@@ -2751,13 +2795,14 @@ const Py = (() => {
       if (k < 0 || k >= n) throw new PyError('IndexError', 'range object index out of range');
       return V.int(obj.start + k * obj.step);
     }
+    if (obj.t === 'class' && obj.enumMembers) { const m = i.t === 'str' && obj.dict.get(i.v); if (m && obj.enumMembers.includes(m)) return m; throw keyErr(i); }
     if (obj.t === 'class' && classAttr(obj, '__class_getitem__')) return obj;
     if (obj.t === 'type') return obj; // list[int] in a type hint
     const seq = obj.t === 'str' ? [...obj.v] : isSeq(obj) ? obj.v : null;
     if (!seq) throw new PyError('TypeError', `'${typeName(obj)}' object is not subscriptable`);
     if (i.t !== 'int' && i.t !== 'bool') throw new PyError('TypeError', `${obj.t === 'str' ? 'string' : obj.t} indices must be integers${obj.t === 'str' ? '' : ' or slices'}, not '${typeName(i)}'`);
     const k = num(i) < 0 ? seq.length + num(i) : num(i);
-    if (k < 0 || k >= seq.length) throw new PyError('IndexError', `${obj.t === 'str' ? 'string' : obj.t} index out of range`);
+    if (k < 0 || k >= seq.length) throw new PyError('IndexError', `${obj.t === 'str' ? 'string' : obj.sub === DEQUE ? 'deque' : obj.t} index out of range`);
     return obj.t === 'str' ? V.str(seq[k]) : seq[k];
   }
 
@@ -2877,6 +2922,7 @@ const Py = (() => {
       } else if (v.t === 'instance') {
         const ex = classAttr(v.cls, '__exit__');
         const e = err instanceof PyError ? errValue(err) : null;
+        v.pendingErr = err instanceof PyError ? err : null;
         const r = userCall(ex, [v, e ? typeOf(e) : V.none, e || V.none, V.none]);
         if (err instanceof PyError && truthy(r)) err = null;
       } else if (v.kind === 'raises') {
@@ -3026,6 +3072,7 @@ const Py = (() => {
         execBlock(s.body, cscope, ctx);
         if (cscope.annotations) { const d = dict(); for (const [k, v] of cscope.annotations) d.v.set(keyOf(V.str(k)), [V.str(k), v]); cscope.vars.__annotations__ = d; }
         let cls = makeClass(s.name, bases, cscope.vars);
+        if (!cls.enumBase && cls.mro.some(c => c.enumBase)) enumify(cls, ctx);
         for (const d of s.decos.slice().reverse()) cls = callValue(evalE(d.e, scope, ctx), [cls], {}, ctx);
         bindName(scope, s.name, cls);
         ctx.trace.push({ kind: 'step', line: s.line, env: snapshot(scope) });
@@ -3080,7 +3127,7 @@ const Py = (() => {
           let c = evalE(s.cause, scope, ctx);
           if (c.t === 'exctype') c = makeException(c.v, []);
           if (c.t === 'class' && c.exc) c = makeInstance(c, [], {}, ctx);
-          if (err.obj) err.obj.cause = c;
+          if (err.obj) { err.obj.cause = c; err.obj.suppress = true; }
         }
         throw err;
       }
@@ -3738,8 +3785,8 @@ const Py = (() => {
   function makeCopy() {
     const shallow = x => {
       switch (x.t) {
-        case 'list': return V.list(x.v.slice());
-        case 'dict': { const d = dict(); for (const [k, e] of x.v) d.v.set(k, [e[0], e[1]]); return d; }
+        case 'list': { const l = V.list(x.v.slice()); if (x.sub) { l.sub = x.sub; l.maxlen = x.maxlen; } return l; }
+        case 'dict': { const d = dict(); d.sub = x.sub; d.factory = x.factory; for (const [k, e] of x.v) d.v.set(k, [e[0], e[1]]); if (!d.sub) delete d.sub; return d; }
         case 'set': { const r = mkSet([...x.v.values()]); r.frozen = x.frozen; return r; }
         case 'instance': return { t: 'instance', cls: x.cls, attrs: new Map(x.attrs) };
         default: return x;
@@ -5470,7 +5517,642 @@ const Py = (() => {
     });
     return mkModule('bs4', { BeautifulSoup: Soup, Tag: TAG });
   }
-  const MODULES = { 'urllib.request': makeUrllibRequest, 'urllib.parse': makeUrllibParse, 'urllib.error': makeUrllibError, bs4: makeBs4, copy: makeCopy, sqlite3: makeSqlite, 'xml.etree.ElementTree': makeEtree, datetime: makeDatetime, logging: makeLogging, pathlib: makePathlib, os: makeOs, 'os.path': ctx => makeOs(ctx).members.get('path'), shutil: makeShutil, argparse: makeArgparse, random: makeRandom, math: makeMath, statistics: makeStatistics, json: makeJson, csv: makeCsv, sys: makeSys, re: makeRe, pytest: makePytest, requests: makeRequests, string: STRING_MOD };
+
+  /* ---------- collections: built-in kinds that are really subclasses ----------
+     A Counter is a dict, a deque a list, a namedtuple a tuple; x.sub is the spec
+     with its name, extra methods, repr, missing-key rule and operators. */
+  const andJoin = ms => (ms.length === 1 ? ms[0] : ms.slice(0, -1).join(', ') + ' and ' + ms[ms.length - 1]);
+  const plainDictRepr = x => '{' + [...x.v.values()].map(([k, v]) => repr(k) + ': ' + repr(v)).join(', ') + '}';
+  function subType(spec) { spec.type = { t: 'type', v: spec.name, spec }; return spec; }
+  function dictPut(d, k, v) { const kk = keyOf(k), e = d.v.get(kk); if (e) e[1] = v; else d.v.set(kk, [k, v]); }
+  function copyInto(d, src) {
+    if (src.t === 'dict') { for (const [, [k, v]] of src.v) dictPut(d, k, v); return; }
+    for (const pair of iterate(src)) { const kv = iterate(pair); if (kv.length !== 2) throw new PyError('ValueError', 'dictionary update sequence element has length ' + kv.length + '; 2 is required'); dictPut(d, kv[0], kv[1]); }
+  }
+  const kwInto = (d, kw) => { for (const k of Object.keys(kw || {})) dictPut(d, V.str(k), kw[k]); };
+  const isCallableV = f => ['builtin', 'native', 'function', 'boundmethod', 'class', 'type', 'exctype', 'method'].includes(f.t) || (f.t === 'object' && !!f.call) || (f.t === 'instance' && !!classAttr(f.cls, '__call__'));
+  const subDict = sp => { const d = dict(); d.sub = sp; return d; };
+  const counterGet = (c, k) => { const e = c.v.get(keyOf(k)); return e ? e[1] : V.int(0); };
+  function counterAdd(c, src, kw, sign) {
+    const bump = (k, by) => dictPut(c, k, binop(sign > 0 ? '+' : '-', counterGet(c, k), by));
+    if (src && src.t !== 'NoneType') {
+      if (src.t === 'dict') for (const [, [k, v]] of src.v) bump(k, v);
+      else for (const k of iterate(src)) bump(k, V.int(1));
+    }
+    for (const k of Object.keys(kw || {})) bump(V.str(k), kw[k]);
+  }
+  const counterSorted = x => [...x.v.values()].map(e => [e[0], e[1]]).sort((a, b) => num(b[1]) - num(a[1]));
+  const COUNTER = subType({ name: 'Counter', mod: 'collections',
+    make(args, kw) { const c = subDict(COUNTER); counterAdd(c, args[0], kw, 1); return c; },
+    repr: x => (x.v.size ? 'Counter({' + counterSorted(x).map(([k, v]) => repr(k) + ': ' + repr(v)).join(', ') + '})' : 'Counter()'),
+    missing: () => V.int(0),
+    methods: {
+      most_common(x, [n]) { let es = counterSorted(x); if (n && n.t !== 'NoneType') es = es.slice(0, Math.max(0, needInt(n))); return V.list(es.map(([k, v]) => V.tuple([k, v]))); },
+      elements(x) { const out = []; for (const [, [k, v]] of x.v) for (let i = 0; i < num(v); i++) out.push(k); let i = 0; return mkIter('itertools.chain', () => (i < out.length ? out[i++] : DONE)); },
+      update(x, [a], kw) { counterAdd(x, a, kw, 1); return V.none; },
+      subtract(x, [a], kw) { counterAdd(x, a, kw, -1); return V.none; },
+      total(x) { let t = 0, fl = false; for (const [, [, v]] of x.v) { t += num(v); if (v.t === 'float') fl = true; } return mkNum(t, fl); },
+      copy(x) { const c = subDict(COUNTER); for (const [k, e] of x.v) c.v.set(k, [e[0], e[1]]); return c; },
+    },
+    ops(op, a, b) {
+      if (!['+', '-', '|', '&'].includes(op) || a.sub !== COUNTER || b.sub !== COUNTER) return null;
+      const out = subDict(COUNTER), pos = v => num(v) > 0;
+      for (const [kk, [k, v]] of a.v) {
+        const o = counterGet(b, k);
+        const nv = op === '+' ? binop('+', v, o) : op === '-' ? binop('-', v, o) : op === '|' ? (num(v) < num(o) ? o : v) : (num(v) < num(o) ? v : o);
+        if (pos(nv)) out.v.set(kk, [k, nv]);
+      }
+      if (op !== '&') for (const [kk, [k, v]] of b.v) {
+        if (a.v.has(kk)) continue;
+        if (op === '-') { if (num(v) < 0) out.v.set(kk, [k, binop('-', V.int(0), v)]); }
+        else if (pos(v)) out.v.set(kk, [k, v]);
+      }
+      return out;
+    },
+  });
+  const DEFAULTDICT = subType({ name: 'defaultdict', tp: 'collections.defaultdict', mod: 'collections',
+    make(args, kw) {
+      const d = subDict(DEFAULTDICT), f0 = args[0];
+      if (f0 && f0.t !== 'NoneType' && !isCallableV(f0)) throw new PyError('TypeError', 'first argument must be callable or None');
+      d.factory = f0 && f0.t !== 'NoneType' ? f0 : null;
+      if (args[1]) copyInto(d, args[1]);
+      kwInto(d, kw);
+      return d;
+    },
+    repr: x => 'defaultdict(' + (x.factory ? repr(x.factory) : 'None') + ', ' + plainDictRepr(x) + ')',
+    missing(x, k) { if (!x.factory) throw keyErr(k); const v = callValue(x.factory, [], {}, CUR); dictPut(x, k, v); return v; },
+    attr: (x, name) => (name === 'default_factory' ? x.factory || V.none : undefined),
+    methods: { copy(x) { const d = subDict(DEFAULTDICT); d.factory = x.factory; for (const [k, e] of x.v) d.v.set(k, [e[0], e[1]]); return d; } },
+  });
+  const ORDEREDDICT = subType({ name: 'OrderedDict', tp: 'collections.OrderedDict', mod: 'collections',
+    make(args, kw) { const d = subDict(ORDEREDDICT); if (args[0]) copyInto(d, args[0]); kwInto(d, kw); return d; },
+    repr: x => (x.v.size ? 'OrderedDict(' + plainDictRepr(x) + ')' : 'OrderedDict()'),
+    methods: {
+      move_to_end(x, [k, last], kw) {
+        const kk = keyOf(k), e = x.v.get(kk);
+        if (!e) throw keyErr(k);
+        const lv = last || kw.last, toEnd = lv ? truthy(lv) : true;
+        x.v.delete(kk);
+        if (toEnd) x.v.set(kk, e);
+        else { const rest = [...x.v]; x.v.clear(); x.v.set(kk, e); for (const [a, b] of rest) x.v.set(a, b); }
+        return V.none;
+      },
+      popitem(x, [last], kw) {
+        if (!x.v.size) throw keyErr(V.str('dictionary is empty'));
+        const lv = last || kw.last, fromEnd = lv ? truthy(lv) : true, ks = [...x.v.keys()];
+        const kk = fromEnd ? ks[ks.length - 1] : ks[0], e = x.v.get(kk);
+        x.v.delete(kk);
+        return V.tuple([e[0], e[1]]);
+      },
+      copy(x) { const d = subDict(ORDEREDDICT); for (const [k, e] of x.v) d.v.set(k, [e[0], e[1]]); return d; },
+    },
+  });
+  function dqPush(q, v) { q.v.push(v); if (q.maxlen != null && q.v.length > q.maxlen) q.v.shift(); }
+  function dqLeft(q, v) { q.v.unshift(v); if (q.maxlen != null && q.v.length > q.maxlen) q.v.pop(); }
+  const DEQUE = subType({ name: 'deque', tp: 'collections.deque', mod: 'collections', deny: ['sort'],
+    make(args, kw) {
+      const src = args[0] || kw.iterable, ml = args[1] || kw.maxlen, q = V.list([]);
+      q.sub = DEQUE;
+      q.maxlen = ml && ml.t !== 'NoneType' ? needInt(ml) : null;
+      if (q.maxlen != null && q.maxlen < 0) throw new PyError('ValueError', 'maxlen must be non-negative');
+      if (src) for (const v of iterate(src).slice()) dqPush(q, v);
+      return q;
+    },
+    repr: x => 'deque([' + x.v.map(repr).join(', ') + ']' + (x.maxlen != null ? ', maxlen=' + x.maxlen : '') + ')',
+    attr: (x, name) => (name === 'maxlen' ? (x.maxlen == null ? V.none : V.int(x.maxlen)) : undefined),
+    methods: {
+      append(x, [v]) { dqPush(x, v); return V.none; },
+      appendleft(x, [v]) { dqLeft(x, v); return V.none; },
+      pop(x) { if (!x.v.length) throw new PyError('IndexError', 'pop from an empty deque'); return x.v.pop(); },
+      popleft(x) { if (!x.v.length) throw new PyError('IndexError', 'pop from an empty deque'); return x.v.shift(); },
+      extend(x, [it]) { for (const v of iterate(it).slice()) dqPush(x, v); return V.none; },
+      extendleft(x, [it]) { for (const v of iterate(it).slice()) dqLeft(x, v); return V.none; },
+      rotate(x, [n]) { const k = n ? needInt(n) : 1, L = x.v.length; if (L) { const r = ((k % L) + L) % L; if (r) x.v.unshift(...x.v.splice(L - r)); } return V.none; },
+      copy(x) { const q = V.list(x.v.slice()); q.sub = DEQUE; q.maxlen = x.maxlen; return q; },
+    },
+    ops(op, a, b) {
+      if (op !== '+') return null;
+      if (a.sub === DEQUE) {
+        if (b.sub !== DEQUE) throw new PyError('TypeError', 'can only concatenate deque (not "' + typeName(b) + '") to deque');
+        const q = DEQUE.methods.copy(a); for (const v of b.v) dqPush(q, v); return q;
+      }
+      if (a.t === 'list') throw new PyError('TypeError', 'can only concatenate list (not "collections.deque") to list');
+      return null;
+    },
+  });
+  const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
+  function makeNamedtuple(nm, fieldsV, defaultsV) {
+    const fields = fieldsV.t === 'str' ? fieldsV.v.replace(/,/g, ' ').split(/\s+/).filter(Boolean) : iterate(fieldsV).map(fmt);
+    for (const n of [nm, ...fields]) {
+      if (!IDENT.test(n)) throw new PyError('ValueError', 'Type names and field names must be valid identifiers: ' + strRepr(n));
+      if (KEYWORDS.includes(n)) throw new PyError('ValueError', 'Type names and field names cannot be a keyword: ' + strRepr(n));
+    }
+    const seen = new Set();
+    for (const n of fields) {
+      if (n.startsWith('_')) throw new PyError('ValueError', 'Field names cannot start with an underscore: ' + strRepr(n));
+      if (seen.has(n)) throw new PyError('ValueError', 'Encountered duplicate field name: ' + strRepr(n));
+      seen.add(n);
+    }
+    const defs = defaultsV && defaultsV.t !== 'NoneType' ? iterate(defaultsV) : [];
+    const defaults = {};
+    defs.forEach((v, i) => { defaults[fields[fields.length - defs.length + i]] = v; });
+    const spec = subType({ name: nm, mod: '__main__', fields });
+    const build = vals => { const t = V.tuple(vals); t.sub = spec; return t; };
+    spec.make = (a, k) => {
+      const where = nm + '.__new__()';
+      if (a.length > fields.length) throw new PyError('TypeError', where + ' takes ' + (fields.length + 1) + ' positional arguments but ' + (a.length + 1) + ' were given');
+      const vals = a.slice();
+      for (const key of Object.keys(k || {})) {
+        const i = fields.indexOf(key);
+        if (i < 0) throw new PyError('TypeError', where + " got an unexpected keyword argument '" + key + "'");
+        if (vals[i] !== undefined) throw new PyError('TypeError', where + " got multiple values for argument '" + key + "'");
+        vals[i] = k[key];
+      }
+      fields.forEach((fl, i) => { if (vals[i] === undefined && fl in defaults) vals[i] = defaults[fl]; });
+      const miss = fields.filter((fl, i) => vals[i] === undefined).map(fl => "'" + fl + "'");
+      if (miss.length) throw new PyError('TypeError', where + ' missing ' + miss.length + ' required positional argument' + (miss.length === 1 ? '' : 's') + ': ' + andJoin(miss));
+      return build(vals);
+    };
+    spec.repr = x => nm + '(' + fields.map((fl, i) => fl + '=' + repr(x.v[i])).join(', ') + ')';
+    const fieldsT = () => V.tuple(fields.map(V.str));
+    spec.attr = (x, name) => { const i = fields.indexOf(name); if (i >= 0) return x.v[i]; if (name === '_fields') return fieldsT(); return undefined; };
+    spec.methods = {
+      _asdict(x) { const d = dict(); fields.forEach((fl, i) => dictPut(d, V.str(fl), x.v[i])); return d; },
+      _replace(x, a, k) {
+        const vals = x.v.slice(), extra = [];
+        for (const key of Object.keys(k)) { const i = fields.indexOf(key); if (i < 0) extra.push(V.str(key)); else vals[i] = k[key]; }
+        if (extra.length) throw new PyError('ValueError', 'Got unexpected field names: ' + repr(V.list(extra)));
+        return build(vals);
+      },
+    };
+    spec.typeAttr = name => {
+      if (name === '_fields') return fieldsT();
+      if (name === '_field_defaults') { const d = dict(); for (const fl of fields) if (fl in defaults) dictPut(d, V.str(fl), defaults[fl]); return d; }
+      if (name === '_make') return nat('_make', ([it]) => { const vs = iterate(it); if (vs.length !== fields.length) throw new PyError('TypeError', 'Expected ' + fields.length + ' arguments, got ' + vs.length); return build(vs.slice()); });
+      return undefined;
+    };
+    return spec.type;
+  }
+  function makeCollections() {
+    return mkModule('collections', {
+      Counter: COUNTER.type, defaultdict: DEFAULTDICT.type, OrderedDict: ORDEREDDICT.type, deque: DEQUE.type,
+      namedtuple: nat('namedtuple', (a, kw) => makeNamedtuple(fmt(a[0] || kw.typename), a[1] || kw.field_names, kw.defaults)),
+    });
+  }
+
+  /* ---------- itertools ---------- */
+  function jsIter(kind, gen) { const g = gen(); return mkIter(kind, () => { const r = g.next(); return r.done ? DONE : r.value; }); }
+  function makeItertools() {
+    const optInt = v => (v && v.t !== 'NoneType' ? needInt(v) : null);
+    const chainOf = srcs => jsIter('itertools.chain', function* () { for (const src of srcs) { const it = iterOf(src); for (;;) { const v = it.next(); if (v === DONE) break; yield v; } } });
+    const chain = { t: 'object', kind: 'type', tn: 'type', attrs: new Map([['from_iterable', nat('from_iterable', ([outer]) => jsIter('itertools.chain', function* () { const o = iterOf(outer); for (;;) { const src = o.next(); if (src === DONE) return; const it = iterOf(src); for (;;) { const v = it.next(); if (v === DONE) break; yield v; } } }))], ['__name__', V.str('chain')]]) };
+    chain.call = args => chainOf(args);
+    chain.repr = () => "<class 'itertools.chain'>";
+    const combos = (pool, r, repeat) => function* () {
+      const n = pool.length;
+      if (r > n && !repeat) return;
+      if (!n && r) return;
+      const idx = [];
+      function* pick(start, depth) {
+        if (depth === r) { yield V.tuple(idx.map(i => pool[i])); return; }
+        for (let i = start; i < n; i++) { idx.push(i); yield* pick(repeat ? i : i + 1, depth + 1); idx.pop(); }
+      }
+      yield* pick(0, 0);
+    };
+    return mkModule('itertools', {
+      count: nat('count', (a, kw) => { let cur = a[0] || kw.start || V.int(0); const step = a[1] || kw.step || V.int(1); return mkIter('itertools.count', () => { const v = cur; cur = binop('+', cur, step); return v; }); }),
+      cycle: nat('cycle', ([src]) => { const saved = [], it = iterOf(src); let i = -1, done = false; return mkIter('itertools.cycle', () => { if (!done) { const v = it.next(); if (v !== DONE) { saved.push(v); return v; } done = true; } if (!saved.length) return DONE; i = (i + 1) % saved.length; return saved[i]; }); }),
+      repeat: nat('repeat', (a, kw) => { const x = a[0], times = optInt(a[1] || kw.times); let k = 0; return mkIter('itertools.repeat', () => (times == null || k++ < times ? x : DONE)); }),
+      islice: nat('islice', a => {
+        const it = iterOf(a[0]);
+        let start = 0, stop, step = 1;
+        if (a.length === 2) stop = optInt(a[1]);
+        else { start = optInt(a[1]) || 0; stop = optInt(a[2]); step = a[3] ? optInt(a[3]) || 1 : 1; }
+        if (start < 0 || (stop != null && stop < 0)) throw new PyError('ValueError', 'Indices for islice() must be None or an integer: 0 <= x <= sys.maxsize.');
+        if (step < 1) throw new PyError('ValueError', 'Step for islice() must be a positive integer or None.');
+        let cnt = 0, nxt = start;
+        return mkIter('itertools.islice', () => {
+          if (stop != null && cnt >= stop) return DONE;
+          while (cnt < nxt) { if (it.next() === DONE) return DONE; cnt++; }
+          if (stop != null && cnt >= stop) return DONE;
+          const v = it.next();
+          if (v === DONE) return DONE;
+          cnt++;
+          nxt += step;
+          if (stop != null && nxt > stop) nxt = stop;
+          return v;
+        });
+      }),
+      chain,
+      accumulate: nat('accumulate', (a, kw) => {
+        const it = iterOf(a[0]), fn = a[1] || kw.func, init = kw.initial;
+        let acc = init && init.t !== 'NoneType' ? init : undefined, first = true;
+        return mkIter('itertools.accumulate', () => {
+          if (first && acc !== undefined) { first = false; return acc; }
+          first = false;
+          const v = it.next();
+          if (v === DONE) return DONE;
+          acc = acc === undefined ? v : fn && fn.t !== 'NoneType' ? callValue(fn, [acc, v], {}, CUR) : binop('+', acc, v);
+          return acc;
+        });
+      }),
+      product: nat('product', (a, kw) => {
+        const rep = kw.repeat ? needInt(kw.repeat) : 1, pools = [];
+        const base = a.map(x => iterate(x).slice());
+        for (let r = 0; r < rep; r++) pools.push(...base);
+        return jsIter('itertools.product', function* () {
+          if (pools.some(p => !p.length)) return;
+          const idx = pools.map(() => 0);
+          for (;;) {
+            yield V.tuple(idx.map((i, k) => pools[k][i]));
+            let k = pools.length - 1;
+            while (k >= 0 && ++idx[k] === pools[k].length) { idx[k] = 0; k--; }
+            if (k < 0) return;
+          }
+        });
+      }),
+      permutations: nat('permutations', (a, kw) => {
+        const pool = iterate(a[0]).slice(), rv = a[1] || kw.r, r = rv && rv.t !== 'NoneType' ? needInt(rv) : pool.length;
+        return jsIter('itertools.permutations', function* () {
+          if (r > pool.length) return;
+          const used = pool.map(() => false), idx = [];
+          function* go() {
+            if (idx.length === r) { yield V.tuple(idx.map(i => pool[i])); return; }
+            for (let i = 0; i < pool.length; i++) if (!used[i]) { used[i] = true; idx.push(i); yield* go(); idx.pop(); used[i] = false; }
+          }
+          yield* go();
+        });
+      }),
+      combinations: nat('combinations', (a, kw) => jsIter('itertools.combinations', combos(iterate(a[0]).slice(), needInt(a[1] || kw.r), false))),
+      combinations_with_replacement: nat('combinations_with_replacement', (a, kw) => jsIter('itertools.combinations_with_replacement', combos(iterate(a[0]).slice(), needInt(a[1] || kw.r), true))),
+      groupby: nat('groupby', (a, kw) => {
+        const it = iterOf(a[0]), keyFn = a[1] || kw.key;
+        const keyOfV = v => (keyFn && keyFn.t !== 'NoneType' ? callValue(keyFn, [v], {}, CUR) : v);
+        let pending = DONE, pendingKey = null, started = false, current = null;
+        return mkIter('itertools.groupby', () => {
+          if (current) current.stale = true;
+          if (!started) { started = true; pending = it.next(); if (pending !== DONE) pendingKey = keyOfV(pending); }
+          if (pending === DONE) return DONE;
+          const k = pendingKey, items = [pending];
+          for (;;) {
+            pending = it.next();
+            if (pending === DONE) break;
+            pendingKey = keyOfV(pending);
+            if (!equal(pendingKey, k)) break;
+            items.push(pending);
+          }
+          const grp = { stale: false };
+          let i = 0;
+          current = grp;
+          return V.tuple([k, mkIter('itertools._grouper', () => (!grp.stale && i < items.length ? items[i++] : DONE))]);
+        });
+      }),
+      zip_longest: nat('zip_longest', (a, kw) => {
+        const its = a.map(iterOf), fill = kw.fillvalue || V.none, done = its.map(() => false);
+        return mkIter('itertools.zip_longest', () => {
+          if (!its.length) return DONE;
+          const row = its.map((it, k) => { if (done[k]) return fill; const v = it.next(); if (v === DONE) { done[k] = true; return fill; } return v; });
+          return done.every(Boolean) ? DONE : V.tuple(row);
+        });
+      }),
+      takewhile: nat('takewhile', ([p, src]) => { const it = iterOf(src); let stop = false; return mkIter('itertools.takewhile', () => { if (stop) return DONE; const v = it.next(); if (v === DONE) return DONE; if (truthy(callValue(p, [v], {}, CUR))) return v; stop = true; return DONE; }); }),
+      dropwhile: nat('dropwhile', ([p, src]) => { const it = iterOf(src); let dropping = true; return mkIter('itertools.dropwhile', () => { for (;;) { const v = it.next(); if (v === DONE) return DONE; if (dropping && truthy(callValue(p, [v], {}, CUR))) continue; dropping = false; return v; } }); }),
+      filterfalse: nat('filterfalse', ([p, src]) => { const it = iterOf(src); return mkIter('itertools.filterfalse', () => { for (;;) { const v = it.next(); if (v === DONE) return DONE; if (!truthy(p.t === 'NoneType' ? v : callValue(p, [v], {}, CUR))) return v; } }); }),
+      starmap: nat('starmap', ([fn, src]) => { const it = iterOf(src); return mkIter('itertools.starmap', () => { const v = it.next(); return v === DONE ? DONE : callValue(fn, iterate(v).slice(), {}, CUR); }); }),
+      compress: nat('compress', ([data, sel]) => { const d = iterOf(data), q = iterOf(sel); return mkIter('itertools.compress', () => { for (;;) { const v = d.next(), k = q.next(); if (v === DONE || k === DONE) return DONE; if (truthy(k)) return v; } }); }),
+      pairwise: nat('pairwise', ([src]) => { const it = iterOf(src); let prev = null; return mkIter('itertools.pairwise', () => { if (prev === null) { prev = it.next(); if (prev === DONE) return DONE; } if (prev === DONE) return DONE; const v = it.next(); if (v === DONE) { prev = DONE; return DONE; } const t = V.tuple([prev, v]); prev = v; return t; }); }),
+      batched: nat('batched', (a, kw) => {
+        const it = iterOf(a[0]), n = needInt(a[1] || kw.n), strict = kw.strict && truthy(kw.strict);
+        if (n < 1) throw new PyError('ValueError', 'n must be at least one');
+        return mkIter('itertools.batched', () => {
+          const b = [];
+          while (b.length < n) { const v = it.next(); if (v === DONE) break; b.push(v); }
+          if (!b.length) return DONE;
+          if (strict && b.length < n) throw new PyError('ValueError', 'batched(): incomplete batch');
+          return V.tuple(b);
+        });
+      }),
+      tee: nat('tee', ([src, nV]) => {
+        const it = iterOf(src), n = nV ? needInt(nV) : 2, buf = [], pos = [];
+        let end = false;
+        const outs = [];
+        for (let k = 0; k < n; k++) { pos.push(0); outs.push(mkIter('itertools._tee', () => { if (pos[k] === buf.length) { if (end) return DONE; const v = it.next(); if (v === DONE) { end = true; return DONE; } buf.push(v); } return buf[pos[k]++]; })); }
+        return V.tuple(outs);
+      }),
+    });
+  }
+
+  /* ---------- functools ---------- */
+  function copyNames(wrapper, wrapped) {
+    const get = n => { try { return getAttr(wrapped, n, CUR); } catch (e) { return null; } };
+    const nm = get('__name__'), qn = get('__qualname__'), doc = get('__doc__');
+    if (wrapper.t === 'function') {
+      if (nm && nm.t === 'str') wrapper.name = nm.v;
+      if (qn && qn.t === 'str') wrapper.qualname = qn.v; else if (nm && nm.t === 'str') wrapper.qualname = nm.v;
+      wrapper.doc = doc && doc.t === 'str' ? doc.v : null;
+      (wrapper.attrs = wrapper.attrs || new Map()).set('__wrapped__', wrapped);
+      if (wrapped.t === 'function' && wrapped.attrs) for (const [k, v] of wrapped.attrs) if (k !== '__wrapped__') wrapper.attrs.set(k, v);
+    } else if (wrapper.attrs) {
+      for (const [k, v] of [['__name__', nm], ['__qualname__', qn], ['__doc__', doc]]) if (v) wrapper.attrs.set(k, v);
+      wrapper.attrs.set('__wrapped__', wrapped);
+    }
+    return wrapper;
+  }
+  let CACHEINFO = null;
+  function cacheWrap(fn, maxsize) {
+    if (!CACHEINFO) CACHEINFO = makeNamedtuple('CacheInfo', V.str('hits misses maxsize currsize'));
+    const store = new Map();
+    let hits = 0, misses = 0;
+    const o = { t: 'object', kind: 'functools._lru_cache_wrapper', tn: 'functools._lru_cache_wrapper', bindable: true, attrs: new Map() };
+    o.call = (a, k, c) => {
+      const key = keyOf(V.tuple([...a, ...Object.keys(k).flatMap(n => [V.str('\u0001' + n), k[n]])]));
+      if (store.has(key)) { hits++; const v = store.get(key); if (maxsize != null) { store.delete(key); store.set(key, v); } return v; }
+      misses++;
+      const v = callValue(fn, a, k, c);
+      if (maxsize === 0) return v;
+      store.set(key, v);
+      if (maxsize != null && store.size > maxsize) store.delete(store.keys().next().value);
+      return v;
+    };
+    o.attrs.set('cache_info', nat('cache_info', () => CACHEINFO.spec.make([V.int(hits), V.int(misses), maxsize == null ? V.none : V.int(maxsize), V.int(store.size)], {})));
+    o.attrs.set('cache_clear', nat('cache_clear', () => { store.clear(); hits = 0; misses = 0; return V.none; }));
+    return copyNames(o, fn);
+  }
+  const ORDER_OPS = ['__lt__', '__le__', '__gt__', '__ge__'];
+  function totalOrdering(cls) {
+    const roots = ORDER_OPS.filter(op => classAttr(cls, op));
+    if (!roots.length) throw new PyError('ValueError', 'must define at least one ordering operation: < > <= >=');
+    const root = roots[0], rf = classAttr(cls, root);
+    const via = (self, other) => userCall(rf, [self, other]);
+    const derive = {
+      __lt__: { __gt__: (r, eq) => !r && !eq, __le__: (r, eq) => r || eq, __ge__: r => !r },
+      __le__: { __ge__: (r, eq) => !r || eq, __lt__: (r, eq) => r && !eq, __gt__: r => !r },
+      __gt__: { __lt__: (r, eq) => !r && !eq, __ge__: (r, eq) => r || eq, __le__: r => !r },
+      __ge__: { __le__: (r, eq) => !r || eq, __gt__: (r, eq) => r && !eq, __lt__: r => !r },
+    }[root];
+    for (const [op, rule] of Object.entries(derive)) {
+      if (roots.includes(op)) continue;
+      cls.dict.set(op, nat(op, ([self, other]) => { const r = via(self, other); if (r === NOTIMPL) return r; return V.bool(rule(truthy(r), equal(self, other))); }));
+    }
+    return cls;
+  }
+  function cmpToKey(cmp) {
+    const sign = (a, b) => num(callValue(cmp, [a.attrs.get('obj'), b.attrs.get('obj')], {}, CUR));
+    const K = makeClass('K', [], {
+      __lt__: nat('__lt__', ([a, b]) => V.bool(sign(a, b) < 0)), __gt__: nat('__gt__', ([a, b]) => V.bool(sign(a, b) > 0)),
+      __le__: nat('__le__', ([a, b]) => V.bool(sign(a, b) <= 0)), __ge__: nat('__ge__', ([a, b]) => V.bool(sign(a, b) >= 0)),
+      __eq__: nat('__eq__', ([a, b]) => V.bool(sign(a, b) === 0)),
+    });
+    return nat('K', ([x]) => ({ t: 'instance', cls: K, attrs: new Map([['obj', x]]) }));
+  }
+  function makeFunctools() {
+    const lru = nat('lru_cache', (a, kw) => {
+      if (a[0] && isCallableV(a[0]) && a[0].t !== 'type') return cacheWrap(a[0], 128);
+      const mv = a.length ? a[0] : kw.maxsize, ms = mv === undefined ? 128 : mv.t === 'NoneType' ? null : Math.max(0, needInt(mv));
+      return nat('decorating_function', ([fn]) => cacheWrap(fn, ms));
+    });
+    return mkModule('functools', {
+      reduce: nat('reduce', ([fn, seq, init]) => {
+        const it = iterOf(seq);
+        let acc = init;
+        if (acc === undefined) { acc = it.next(); if (acc === DONE) throw new PyError('TypeError', 'reduce() of empty iterable with no initial value'); }
+        for (;;) { const v = it.next(); if (v === DONE) return acc; acc = callValue(fn, [acc, v], {}, CUR); }
+      }),
+      partial: nat('partial', ([fn, ...pre], kw) => {
+        if (!fn || !isCallableV(fn)) throw new PyError('TypeError', 'the first argument must be callable');
+        const kwd = dict(); kwInto(kwd, kw);
+        const p = { t: 'object', kind: 'functools.partial', tn: 'functools.partial', attrs: new Map([['func', fn], ['args', V.tuple(pre)], ['keywords', kwd]]) };
+        p.call = (a, k, c) => callValue(fn, [...pre, ...a], { ...kw, ...k }, c);
+        p.repr = () => 'functools.partial(' + [repr(fn), ...pre.map(repr), ...Object.keys(kw).map(k => k + '=' + repr(kw[k]))].join(', ') + ')';
+        return p;
+      }),
+      wraps: nat('wraps', ([wrapped]) => nat('update_wrapper', ([wrapper]) => copyNames(wrapper, wrapped))),
+      update_wrapper: nat('update_wrapper', ([wrapper, wrapped]) => copyNames(wrapper, wrapped)),
+      lru_cache: lru,
+      cache: nat('cache', ([fn]) => cacheWrap(fn, null)),
+      total_ordering: nat('total_ordering', ([cls]) => totalOrdering(cls)),
+      cmp_to_key: nat('cmp_to_key', ([cmp]) => cmpToKey(cmp)),
+    });
+  }
+
+  /* ---------- operator ---------- */
+  function makeOperator() {
+    const bin = (name, op) => nat(name, ([a, b]) => binop(op, a, b));
+    const cmp = (name, op) => nat(name, ([a, b]) => { const r = compare(op, a, b); return typeof r === 'boolean' ? V.bool(r) : r; });
+    const getter = (kind, fn) => { const o = { t: 'object', kind: 'operator.' + kind, tn: 'operator.' + kind, attrs: new Map() }; o.call = fn; return o; };
+    const dotted = (obj, path) => path.split('.').reduce((o, n) => getAttr(o, n, CUR), obj);
+    return mkModule('operator', {
+      add: bin('add', '+'), sub: bin('sub', '-'), mul: bin('mul', '*'), truediv: bin('truediv', '/'), floordiv: bin('floordiv', '//'),
+      mod: bin('mod', '%'), pow: bin('pow', '**'), concat: bin('concat', '+'),
+      eq: cmp('eq', '=='), ne: cmp('ne', '!='), lt: cmp('lt', '<'), le: cmp('le', '<='), gt: cmp('gt', '>'), ge: cmp('ge', '>='),
+      neg: nat('neg', ([a]) => binop('-', V.int(0), a)),
+      not_: nat('not_', ([a]) => V.bool(!truthy(a))), truth: nat('truth', ([a]) => V.bool(truthy(a))),
+      contains: nat('contains', ([a, b]) => V.bool(contains(a, b))),
+      getitem: nat('getitem', ([a, b]) => getItem(a, b)),
+      itemgetter: nat('itemgetter', items => getter('itemgetter', ([x]) => (items.length === 1 ? getItem(x, items[0]) : V.tuple(items.map(i => getItem(x, i)))))),
+      attrgetter: nat('attrgetter', names => getter('attrgetter', ([x]) => (names.length === 1 ? dotted(x, fmt(names[0])) : V.tuple(names.map(n => dotted(x, fmt(n))))))),
+      methodcaller: nat('methodcaller', ([name, ...margs], mkw) => getter('methodcaller', ([x]) => callMethod(x, fmt(name), margs, mkw, CUR))),
+    });
+  }
+
+  /* ---------- contextlib ---------- */
+  let GEN_CM = null;
+  function genCM() {
+    if (GEN_CM) return GEN_CM;
+    GEN_CM = makeClass('_GeneratorContextManager', [], {
+      __enter__: nat('__enter__', ([self]) => { const v = self.gen.next(); if (v === DONE) throw new PyError('RuntimeError', "generator didn't yield"); return v; }),
+      __exit__: nat('__exit__', ([self, typ, val]) => {
+        const g = self.gen;
+        if (!typ || typ.t === 'NoneType') { if (g.next() !== DONE) throw new PyError('RuntimeError', "generator didn't stop"); return V.bool(false); }
+        const err = self.pendingErr && errValue(self.pendingErr) === val ? self.pendingErr : raiseValue(val);
+        let r;
+        try { r = g.throw(err); }
+        catch (e) { if (e === err || (e instanceof PyError && e.obj && e.obj === val)) return V.bool(false); throw e; }
+        if (r === DONE) return V.bool(true);
+        throw new PyError('RuntimeError', "generator didn't stop after throw()");
+      }),
+    });
+    return GEN_CM;
+  }
+  function makeContextlib() {
+    const simple = (name, enter, exit) => makeClass(name, [], { __enter__: nat('__enter__', enter), __exit__: nat('__exit__', exit) });
+    const SUPPRESS = simple('suppress', () => V.none, ([self, typ, val]) => V.bool(!!typ && typ.t !== 'NoneType' && self.excs.some(C => isInstance(val, C))));
+    const NULLCTX = simple('nullcontext', ([self]) => self.result, () => V.bool(false));
+    const CLOSING = simple('closing', ([self]) => self.thing, ([self]) => { callMethod(self.thing, 'close', [], {}, CUR); return V.bool(false); });
+    const inst = (cls, extra) => Object.assign({ t: 'instance', cls, attrs: new Map() }, extra);
+    return mkModule('contextlib', {
+      contextmanager: nat('contextmanager', ([fn]) => {
+        const o = { t: 'object', kind: 'function', tn: 'function', bindable: true, attrs: new Map() };
+        o.call = (a, k, c) => inst(genCM(), { gen: callValue(fn, a, k, c) });
+        o.repr = () => '<function ' + (fn.qualname || fn.name) + ADDR + '>';
+        return copyNames(o, fn);
+      }),
+      suppress: nat('suppress', excs => inst(SUPPRESS, { excs })),
+      nullcontext: nat('nullcontext', ([r]) => inst(NULLCTX, { result: r || V.none })),
+      closing: nat('closing', ([thing]) => inst(CLOSING, { thing })),
+    });
+  }
+
+  /* ---------- dataclasses ---------- */
+  const strHash = str => { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h | 0; };
+  function dcProcess(cls, o) {
+    const fields = [];
+    const put = fl => { const i = fields.findIndex(g => g.name === fl.name); if (i >= 0) fields[i] = fl; else fields.push(fl); };
+    for (const c of cls.mro.slice(1).reverse()) if (c.dcFields) c.dcFields.forEach(put);
+    const ann = cls.dict.get('__annotations__');
+    if (ann && ann.t === 'dict') for (const [, [k, typ]] of ann.v) {
+      const name = k.v;
+      if (typ && typ.t === 'type' && typ.v === 'ClassVar') continue;
+      const dv = cls.dict.get(name);
+      let fl;
+      if (dv && dv.isField) {
+        fl = { name, type: typ, default: dv.default, factory: dv.factory, init: dv.init, reprOn: dv.reprOn, compare: dv.compare };
+        if (dv.default !== undefined) cls.dict.set(name, dv.default); else cls.dict.delete(name);
+      } else fl = { name, type: typ, default: dv, init: true, reprOn: true, compare: true };
+      if (fl.default && ['list', 'dict', 'set'].includes(fl.default.t) && !fl.default.frozen) throw new PyError('ValueError', 'mutable default ' + fmt(typeOf(fl.default)) + ' for field ' + name + ' is not allowed: use default_factory');
+      put(fl);
+    }
+    let prevDef = null;
+    for (const fl of fields) {
+      if (!fl.init) continue;
+      if (fl.default !== undefined || fl.factory) prevDef = fl.name;
+      else if (prevDef) throw new PyError('TypeError', "non-default argument '" + fl.name + "' follows default argument '" + prevDef + "'");
+    }
+    cls.dcFields = fields;
+    const own = n => cls.dict.has(n);
+    const initF = fields.filter(fl => fl.init);
+    if (o.init && !own('__init__')) cls.dict.set('__init__', nat('__init__', (args, kw, c) => {
+      const self = args[0], a = args.slice(1), where = cls.name + '.__init__()';
+      if (a.length > initF.length) {
+        const need = initF.filter(fl => fl.default === undefined && !fl.factory).length;
+        const takes = need === initF.length ? String(initF.length + 1) : 'from ' + (need + 1) + ' to ' + (initF.length + 1);
+        throw new PyError('TypeError', where + ' takes ' + takes + ' positional argument' + (takes === '1' ? '' : 's') + ' but ' + (a.length + 1) + ' were given');
+      }
+      const vals = {};
+      a.forEach((v, i) => { vals[initF[i].name] = v; });
+      for (const k of Object.keys(kw)) {
+        if (!initF.some(fl => fl.name === k)) throw new PyError('TypeError', where + " got an unexpected keyword argument '" + k + "'");
+        if (k in vals) throw new PyError('TypeError', where + " got multiple values for argument '" + k + "'");
+        vals[k] = kw[k];
+      }
+      const miss = initF.filter(fl => !(fl.name in vals) && fl.default === undefined && !fl.factory).map(fl => "'" + fl.name + "'");
+      if (miss.length) throw new PyError('TypeError', where + ' missing ' + miss.length + ' required positional argument' + (miss.length === 1 ? '' : 's') + ': ' + andJoin(miss));
+      for (const fl of fields) {
+        let v = fl.init ? vals[fl.name] : undefined;
+        if (v === undefined) { if (fl.factory) v = callValue(fl.factory, [], {}, c); else if (fl.init && fl.default !== undefined) v = fl.default; else continue; }
+        if (o.frozen) self.attrs.set(fl.name, v); else setAttr(self, fl.name, v);
+      }
+      const post = classAttr(cls, '__post_init__');
+      if (post) callValue(post, [self], {}, c);
+      return V.none;
+    }));
+    if (o.repr && !own('__repr__')) cls.dict.set('__repr__', nat('__repr__', ([self]) => V.str(self.cls.name + '(' + fields.filter(fl => fl.reprOn).map(fl => fl.name + '=' + repr(getAttr(self, fl.name, CUR))).join(', ') + ')')));
+    const vals = x => V.tuple(fields.filter(fl => fl.compare).map(fl => getAttr(x, fl.name, CUR)));
+    const same = (a, b) => b.t === 'instance' && b.cls === a.cls;
+    if (o.eq && !own('__eq__')) {
+      cls.dict.set('__eq__', nat('__eq__', ([a, b]) => (same(a, b) ? V.bool(equal(vals(a), vals(b))) : NOTIMPL)));
+      if (!own('__hash__')) cls.dict.set('__hash__', o.frozen ? nat('__hash__', ([a]) => V.int(strHash(keyOf(vals(a))))) : V.none);
+    }
+    if (o.order) for (const [op, test] of [['__lt__', (a, b) => less(a, b, '<')], ['__le__', (a, b) => less(a, b, '<=') || equal(a, b)], ['__gt__', (a, b) => less(b, a, '>')], ['__ge__', (a, b) => less(b, a, '>=') || equal(a, b)]])
+      if (!own(op)) cls.dict.set(op, nat(op, ([a, b]) => (same(a, b) ? V.bool(test(vals(a), vals(b))) : NOTIMPL)));
+    if (o.frozen) cls.dcFrozen = true;
+    return cls;
+  }
+  function dcConvert(x, asTuple) {
+    if (x.t === 'instance' && x.cls.dcFields) {
+      const vs = x.cls.dcFields.map(fl => [fl.name, dcConvert(getAttr(x, fl.name, CUR), asTuple)]);
+      if (asTuple) return V.tuple(vs.map(p => p[1]));
+      const d = dict(); for (const [k, v] of vs) dictPut(d, V.str(k), v); return d;
+    }
+    if (x.t === 'list') return V.list(x.v.map(v => dcConvert(v, asTuple)));
+    if (x.t === 'tuple') { const t = V.tuple(x.v.map(v => dcConvert(v, asTuple))); if (x.sub) t.sub = x.sub; return t; }
+    if (x.t === 'dict') { const d = dict(); for (const [, [k, v]] of x.v) dictPut(d, dcConvert(k, asTuple), dcConvert(v, asTuple)); return d; }
+    return x;
+  }
+  function makeDataclasses() {
+    const opt = (v, d) => (v === undefined ? d : truthy(v));
+    const needDC = (x, fn) => { const c = x.t === 'class' ? x : x.t === 'instance' ? x.cls : null; if (!c || !c.dcFields) throw new PyError('TypeError', fn + '() should be called on dataclass instances'); return c; };
+    return mkModule('dataclasses', {
+      dataclass: nat('dataclass', (args, kw) => {
+        const o = { init: opt(kw.init, true), repr: opt(kw.repr, true), eq: opt(kw.eq, true), order: opt(kw.order, false), frozen: opt(kw.frozen, false) };
+        if (o.order && !o.eq) throw new PyError('ValueError', 'eq must be true if order is true');
+        if (args.length && args[0].t === 'class') return dcProcess(args[0], o);
+        return nat('wrap', ([c]) => dcProcess(c, o));
+      }),
+      field: nat('field', (a, kw) => {
+        if (kw.default !== undefined && kw.default_factory !== undefined) throw new PyError('ValueError', 'cannot specify both default and default_factory');
+        return { t: 'object', kind: 'Field', tn: 'Field', isField: true, default: kw.default, factory: kw.default_factory, init: opt(kw.init, true), reprOn: opt(kw.repr, true), compare: opt(kw.compare, true), attrs: new Map() };
+      }),
+      fields: nat('fields', ([x]) => V.tuple(needDC(x, 'fields').dcFields.map(fl => ({ t: 'object', kind: 'Field', tn: 'Field', attrs: new Map([['name', V.str(fl.name)], ['type', fl.type || V.none], ['default', fl.default || V.none]]), repr: () => 'Field(name=' + strRepr(fl.name) + ')' })))),
+      asdict: nat('asdict', ([x]) => { if (x.t !== 'instance' || !x.cls.dcFields) throw new PyError('TypeError', 'asdict() should be called on dataclass instances'); return dcConvert(x, false); }),
+      astuple: nat('astuple', ([x]) => { if (x.t !== 'instance' || !x.cls.dcFields) throw new PyError('TypeError', 'astuple() should be called on dataclass instances'); return dcConvert(x, true); }),
+      replace: nat('replace', ([x], kw) => {
+        const c = needDC(x, 'replace'), k2 = {};
+        for (const fl of c.dcFields) if (fl.init) k2[fl.name] = getAttr(x, fl.name, CUR);
+        for (const k of Object.keys(kw)) k2[k] = kw[k];
+        return callValue(c, [], k2, CUR);
+      }),
+      is_dataclass: nat('is_dataclass', ([x]) => V.bool(!!((x.t === 'class' && x.dcFields) || (x.t === 'instance' && x.cls.dcFields)))),
+      FrozenInstanceError: { t: 'exctype', v: 'FrozenInstanceError' },
+    });
+  }
+
+  /* ---------- enum ---------- */
+  let ENUM_BASE = null;
+  function enumBase() {
+    if (ENUM_BASE) return ENUM_BASE;
+    ENUM_BASE = makeClass('Enum', [], {
+      __repr__: nat('__repr__', ([m]) => V.str('<' + m.cls.name + '.' + m.attrs.get('_name_').v + ': ' + repr(m.attrs.get('_value_')) + '>')),
+      __str__: nat('__str__', ([m]) => V.str(m.cls.name + '.' + m.attrs.get('_name_').v)),
+    });
+    ENUM_BASE.enumBase = true;
+    return ENUM_BASE;
+  }
+  function enumify(cls, ctx) {
+    const members = [];
+    const init = classAttr(cls, '__init__');
+    for (const [k, v] of [...cls.dict]) {
+      if (k.startsWith('_') || ['function', 'classmethod', 'staticmethod', 'property', 'native'].includes(v.t)) continue;
+      let val = v;
+      if (v.t === 'object' && v.isAuto) {
+        const nums = members.map(m => m.attrs.get('_value_')).filter(x => x.t === 'int' || x.t === 'float');
+        val = nums.length ? binop('+', nums.reduce((a, b) => (num(b) > num(a) ? b : a)), V.int(1)) : V.int(1);
+      }
+      const alias = members.find(m => equal(m.attrs.get('_value_'), val));
+      if (alias) { cls.dict.set(k, alias); continue; }
+      const m = { t: 'instance', cls, attrs: new Map([['_name_', V.str(k)], ['_value_', val], ['name', V.str(k)], ['value', val]]) };
+      if (init && init.t === 'function') callValue(init, [m, ...(val.t === 'tuple' ? val.v : [val])], {}, ctx);
+      members.push(m);
+      cls.dict.set(k, m);
+    }
+    cls.enumMembers = members;
+  }
+  function enumLookup(cls, v) {
+    if (v && v.t === 'instance' && v.cls === cls) return v;
+    const m = v && cls.enumMembers.find(x => equal(x.attrs.get('_value_'), v));
+    if (m) return m;
+    throw new PyError('ValueError', (v ? repr(v) : 'None') + ' is not a valid ' + cls.name);
+  }
+  function makeEnum() {
+    return mkModule('enum', {
+      Enum: enumBase(),
+      auto: nat('auto', () => ({ t: 'object', kind: 'auto', tn: 'auto', isAuto: true, attrs: new Map() })),
+      unique: nat('unique', ([cls]) => {
+        const dups = [];
+        for (const [k, v] of cls.dict) if (v.t === 'instance' && v.cls === cls && v.attrs.get('_name_').v !== k) dups.push(k + ' -> ' + v.attrs.get('_name_').v);
+        if (dups.length) throw new PyError('ValueError', "duplicate values found in <enum '" + cls.name + "'>: " + dups.join(', '));
+        return cls;
+      }),
+    });
+  }
+
+  /* ---------- typing: names for type hints ---------- */
+  function makeTyping() {
+    const names = ['Any', 'Optional', 'Union', 'List', 'Dict', 'Tuple', 'Set', 'Callable', 'Iterable', 'Iterator', 'Generator', 'Sequence', 'Mapping', 'ClassVar', 'Literal', 'Final'];
+    return mkModule('typing', Object.fromEntries(names.map(n => [n, { t: 'type', v: n, typing: true }])));
+  }
+
+  const MODULES = { collections: makeCollections, itertools: makeItertools, functools: makeFunctools, operator: makeOperator, contextlib: makeContextlib, dataclasses: makeDataclasses, enum: makeEnum, typing: makeTyping, 'urllib.request': makeUrllibRequest, 'urllib.parse': makeUrllibParse, 'urllib.error': makeUrllibError, bs4: makeBs4, copy: makeCopy, sqlite3: makeSqlite, 'xml.etree.ElementTree': makeEtree, datetime: makeDatetime, logging: makeLogging, pathlib: makePathlib, os: makeOs, 'os.path': ctx => makeOs(ctx).members.get('path'), shutil: makeShutil, argparse: makeArgparse, random: makeRandom, math: makeMath, statistics: makeStatistics, json: makeJson, csv: makeCsv, sys: makeSys, re: makeRe, pytest: makePytest, requests: makeRequests, string: STRING_MOD };
   function loadModule(name, ctx) {
     if (ctx.modules[name]) return ctx.modules[name];
     if (ctx.userModules && ctx.userModules[name]) return (ctx.modules[name] = runUserModule(name, ctx));
