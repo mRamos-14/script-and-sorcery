@@ -2227,6 +2227,8 @@
       return r.json();
     };
     const markReady = info => {
+      // mid-game, a short message instead of an interruption; the title screen shows the button
+      if (!latest && $('#scr-title').hidden) toast('A new version is ready: tap Update now on the title screen.');
       latest = info;
       ub.textContent = 'Update now';
       ub.classList.remove('ghost');
@@ -2254,8 +2256,13 @@
     };
     ub.hidden = false;
     ub.onclick = () => { sfx('tap'); if (latest) update(); else { note('Checking...'); check(true); } };
-    window.addEventListener('load', () => check(false));
-    document.addEventListener('visibilitychange', () => { if (!document.hidden && !latest) check(false); });
+    // check whenever there is a chance of news: on opening, on coming back to the app, the
+    // moment the internet returns, and every 15 minutes while the app is on screen and online
+    const quiet = () => { if (!latest && !document.hidden && navigator.onLine !== false) check(false); };
+    window.addEventListener('load', quiet);
+    document.addEventListener('visibilitychange', quiet);
+    window.addEventListener('online', quiet);
+    setInterval(quiet, 15 * 60 * 1000);
   }
 
   /* ---------------- never freeze ---------------- */
