@@ -70,6 +70,8 @@ progs.forEach((p, i) => {
   // differences that are on purpose: game-only rules and limits
   if (ourErr && (/spell word|later world|this spellbook/.test(ours.error.msg) || ['SpellTimeout', 'RecursionError'].includes(ourErr))) { skipped++; return; }
   if (ours.unordered) { skipped++; return; }
+  // this machine's Python has no BeautifulSoup installed, so bs4 programs cannot be compared
+  if (real.error === 'ModuleNotFoundError' && p.code.some(l => /\bbs4\b/.test(l))) { skipped++; return; }
   if (real.error && real.error.startsWith('HarnessError')) { console.log('harness:', p.where, real.error); return; }
   const sameErr = ourErr === real.error || (ourErr === 'PatternError' && real.error === 'error');
   const norm = o => JSON.stringify(o).replace(/0x[0-9a-fA-F]+/g, '0xADDR');
