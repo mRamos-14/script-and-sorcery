@@ -948,7 +948,27 @@ const Py = (() => {
   }
 
   /* ---------- program structure ---------- */
-  // how many brackets are still open at the end of a line (strings and comments ignored)
+  // Python 3.13+ strips the common indentation from docstring lines after the first
+  function cleanDoc(d) {
+    const lines = d.split('\n');
+    const rest = lines.slice(1);
+    const ind = Math.min(...rest.filter(l => l.trim()).map(l => l.match(/^[ \t]*/)[0].length), Infinity);
+    return [lines[0].replace(/^[ \t]+/, ''), ...rest.map(l => (l.trim() ? l.slice(ind === Infinity ? 0 : ind) : ''))].join('\n');
+  }
+  // at the end of a line: how many brackets are open, and is a triple-quoted string still open?
+  function scanLine(src) {
+    let q = null, tq = null, depth = 0;
+    for (let k = 0; k < src.length; k++) {
+      const c = src[k];
+      if (tq) { if (src.startsWith(tq, k)) { k += 2; tq = null; } else if (c === '\\') k++; continue; }
+      if (q) { if (c === '\\') k++; else if (c === q) q = null; continue; }
+      if (c === '"' || c === "'") { if (src.startsWith(c.repeat(3), k)) { tq = c.repeat(3); k += 2; } else q = c; }
+      else if (c === '#') break;
+      else if ('([{'.includes(c)) depth++;
+      else if (')]}'.includes(c)) depth--;
+    }
+    return { depth, tq };
+  }
   function openDepth(src) {
     let q = null, depth = 0;
     for (let k = 0; k < src.length; k++) {
@@ -989,8 +1009,12 @@ const Py = (() => {
       if (!src.trim() || /^\s*#/.test(src)) continue;
       // inside open brackets (or after a backslash) the statement goes on to the next line
       const start = i;
-      while (i + 1 < lines.length && (openDepth(src) > 0 || /\\\s*$/.test(src))) {
-        src = src.replace(/\\\s*$/, '') + ' ' + lines[++i].trim();
+      // inside a triple-quoted string the next line belongs to it, newline and spaces included
+      let st = scanLine(src);
+      while (i + 1 < lines.length && (st.tq || st.depth > 0 || /\\\s*$/.test(src))) {
+        if (st.tq) src = src + '\n' + lines[++i];
+        else src = src.replace(/\\\s*$/, '') + ' ' + lines[++i].trim();
+        st = scanLine(src);
       }
       for (const part of splitSemis(src)) items.push({ i: start, indent: part.match(/^ */)[0].length, src: part });
     }
@@ -2968,7 +2992,8 @@ const Py = (() => {
       case 'break': throw new Signal('break');
       case 'continue': throw new Signal('continue');
       case 'def': {
-        const doc = s.body[0] && s.body[0].n === 'expr' && s.body[0].e.n === 'lit' && s.body[0].e.val.t === 'str' ? s.body[0].e.val.v : null;
+        const rawDoc = s.body[0] && s.body[0].n === 'expr' && s.body[0].e.n === 'lit' && s.body[0].e.val.t === 'str' ? s.body[0].e.val.v : null;
+        const doc = rawDoc == null ? null : cleanDoc(rawDoc);
         let f = makeFunction(s.name, s.params, s.body, scope, ctx, { globalNames: s.globalNames, nonlocalNames: s.nonlocalNames, locals: s.locals, isGen: s.isGen, line: s.line, doc });
         for (const d of s.decos.slice().reverse()) { ctx.emit = emitAt(d.line); f = callValue(evalE(d.e, scope, ctx), [f], {}, ctx); }
         bindName(scope, s.name, f);
@@ -4276,7 +4301,164 @@ const Py = (() => {
       ...methods(root, true),
     });
   }
-  const MODULES = { copy: makeCopy, datetime: makeDatetime, logging: makeLogging, pathlib: makePathlib, os: makeOs, 'os.path': ctx => makeOs(ctx).members.get('path'), shutil: makeShutil, argparse: makeArgparse, random: makeRandom, math: makeMath, statistics: makeStatistics, json: makeJson, csv: makeCsv, sys: makeSys, re: makeRe, pytest: makePytest, requests: makeRequests, string: STRING_MOD };
+  /* ---------- markup: an XML parser (also used for HTML) and xml.etree.ElementTree ---------- */
+  const ENT = { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'", nbsp: ' ', copy: '©' };
+  const unEntity = s => s.replace(/&(#x[0-9a-fA-F]+|#\d+|\w+);/g, (all, e) => (e[0] === '#' ? String.fromCodePoint(e[1] === 'x' ? parseInt(e.slice(2), 16) : +e.slice(1)) : ENT[e] != null ? ENT[e] : all));
+  const HTML_VOID = ['br', 'img', 'input', 'meta', 'link', 'hr', 'area', 'base', 'col', 'embed', 'source', 'track', 'wbr'];
+  // nodes: { tag, attrs: [[k, v]], kids: [], text: string|null, tail: string|null, parent }
+  function parseMarkup(src, html) {
+    const root = { tag: '#document', attrs: [], kids: [], text: null, tail: null, parent: null };
+    let cur = root, i = 0, line = 1;
+    const addText = t => {
+      if (!t) return;
+      if (cur.kids.length) { const last = cur.kids[cur.kids.length - 1]; last.tail = (last.tail || '') + t; }
+      else cur.text = (cur.text || '') + t;
+    };
+    const fail = msg => new PyError('ParseError', `${msg}: line ${line}, column ${i}`);
+    while (i < src.length) {
+      const lt = src.indexOf('<', i);
+      const chunk = lt < 0 ? src.slice(i) : src.slice(i, lt);
+      if (chunk) { if (cur !== root || chunk.trim() || html) addText(unEntity(chunk)); else if (!html && chunk.trim()) throw fail('syntax error'); }
+      line += (chunk.match(/\n/g) || []).length;
+      if (lt < 0) break;
+      i = lt;
+      if (src.startsWith('<!--', i)) { const e = src.indexOf('-->', i); i = e < 0 ? src.length : e + 3; continue; }
+      if (src.startsWith('<![CDATA[', i)) { const e = src.indexOf(']]>', i); addText(src.slice(i + 9, e < 0 ? src.length : e)); i = e < 0 ? src.length : e + 3; continue; }
+      if (src.startsWith('<?', i) || src.startsWith('<!', i)) { const e = src.indexOf('>', i); i = e < 0 ? src.length : e + 1; continue; }
+      const close = /^<\/\s*([\w:.-]+)\s*>/.exec(src.slice(i));
+      if (close) {
+        const name = html ? close[1].toLowerCase() : close[1];
+        if (html) {
+          let n = cur;
+          while (n && n !== root && n.tag !== name) n = n.parent;
+          if (n && n !== root) cur = n.parent;
+        } else {
+          if (cur === root || cur.tag !== name) throw fail('mismatched tag');
+          cur = cur.parent;
+        }
+        i += close[0].length;
+        continue;
+      }
+      const open = /^<([\w:.-]+)((?:\s+[\w:.-]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'>\/=`]+))?)*)\s*(\/?)>/.exec(src.slice(i));
+      if (!open) { if (html) { addText('<'); i++; continue; } throw fail('not well-formed (invalid token)'); }
+      const name = html ? open[1].toLowerCase() : open[1];
+      const attrs = [];
+      const are = /([\w:.-]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s"'>\/=`]+))?/g;
+      let am;
+      while ((am = are.exec(open[2]))) attrs.push([html ? am[1].toLowerCase() : am[1], am[2] == null ? '' : unEntity(am[2].replace(/^["']|["']$/g, ''))]);
+      if (html && ['p', 'li', 'option'].includes(name) && cur.tag === name) cur = cur.parent;
+      const node = { tag: name, attrs, kids: [], text: null, tail: null, parent: cur };
+      if (!html && cur === root && root.kids.length) throw fail('junk after document element');
+      cur.kids.push(node);
+      i += open[0].length;
+      const selfClose = open[3] === '/' || (html && HTML_VOID.includes(name));
+      if (!selfClose) {
+        if (html && (name === 'script' || name === 'style')) {
+          const e = src.toLowerCase().indexOf('</' + name, i);
+          node.text = src.slice(i, e < 0 ? src.length : e);
+          i = e < 0 ? src.length : src.indexOf('>', e) + 1;
+          continue;
+        }
+        cur = node;
+      }
+    }
+    if (!html && cur !== root) throw fail('no element found');
+    if (!html && !root.kids.length) throw fail('no element found');
+    return root;
+  }
+  const allBelow = n => { const out = []; const walk = x => { for (const k of x.kids) { out.push(k); walk(k); } }; walk(n); return out; };
+  // ElementPath: tag, *, ., .//tag, a/b, [@attr], [@attr='v'], [tag], [n]
+  function etSelect(start, path) {
+    let p = path.trim();
+    if (p.startsWith('/')) throw new PyError('SyntaxError', 'cannot use absolute path on element');
+    if (p.startsWith('./')) p = p.slice(2);
+    let cur = [start], desc = false;
+    for (const step of p.split('/')) {
+      if (step === '') { desc = true; continue; }
+      if (step === '.') { continue; }
+      const m = /^([^[]+)((?:\[[^\]]*\])*)$/.exec(step);
+      if (!m) throw new PyError('SyntaxError', 'invalid path');
+      const name = m[1], preds = m[2].match(/\[[^\]]*\]/g) || [];
+      let groups = [];
+      for (const el of cur) {
+        const pool = desc ? allBelow(el) : el.kids;
+        groups.push(pool.filter(k => name === '*' || k.tag === name));
+      }
+      for (const pr of preds) {
+        const body = pr.slice(1, -1).trim();
+        let test;
+        const at = /^@([\w:.-]+)(?:\s*=\s*(["'])(.*)\2)?$/.exec(body);
+        if (at) test = k => k.attrs.some(([a, v]) => a === at[1] && (at[3] == null || v === at[3]));
+        else if (/^\d+$/.test(body)) { const n = +body; groups = groups.map(g => (g[n - 1] ? [g[n - 1]] : [])); continue; }
+        else if (/^[\w:.-]+$/.test(body)) test = k => k.kids.some(c => c.tag === body);
+        else throw new PyError('SyntaxError', 'invalid predicate');
+        groups = groups.map(g => g.filter(test));
+      }
+      const seen = new Set();
+      cur = groups.flat().filter(x => (seen.has(x) ? false : (seen.add(x), true)));
+      desc = false;
+    }
+    return cur;
+  }
+  function serializeNode(n) {
+    const esc = (t, attr) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, attr ? '&quot;' : '"');
+    const a = n.attrs.map(([k, v]) => ` ${k}="${esc(v, true)}"`).join('');
+    const inner = (n.text ? esc(n.text) : '') + n.kids.map(serializeNode).join('');
+    return (inner || n.text === '' ? `<${n.tag}${a}>${inner}</${n.tag}>` : `<${n.tag}${a} />`) + (n.tail ? esc(n.tail) : '');
+  }
+  function makeEtree(ctx) {
+    const EL = makeClass('Element', [], {});
+    const wrap = node => {
+      if (node.obj) return node.obj;
+      const o = { t: 'instance', cls: EL, attrs: new Map(), node };
+      node.obj = o;
+      return o;
+    };
+    const nodeOf = o => { if (!o || o.t !== 'instance' || !o.node) throw new PyError('TypeError', 'expected an Element'); return o.node; };
+    const prop = (get, set) => ({ t: 'property', fget: nat('get', ([o]) => get(nodeOf(o))), fset: set ? nat('set', ([o, v]) => { set(nodeOf(o), v); return V.none; }) : null });
+    const strOrNone = s => (s == null ? V.none : V.str(s));
+    const attribDict = n => { const d = dict(); for (const [k, v] of n.attrs) d.v.set(keyOf(V.str(k)), [V.str(k), V.str(v)]); return d; };
+    const dictEntries = d => (d && d.t === 'dict' ? [...d.v.values()].map(([k, v]) => [fmt(k), fmt(v)]) : []);
+    const dict2 = {
+      tag: prop(n => V.str(n.tag), (n, v) => { n.tag = fmt(v); }),
+      text: prop(n => strOrNone(n.text), (n, v) => { n.text = v.t === 'NoneType' ? null : fmt(v); }),
+      tail: prop(n => strOrNone(n.tail), (n, v) => { n.tail = v.t === 'NoneType' ? null : fmt(v); }),
+      attrib: prop(n => attribDict(n)),
+      get: nat('get', ([o, k, d]) => { const hit = nodeOf(o).attrs.find(([a]) => a === fmt(k)); return hit ? V.str(hit[1]) : d || V.none; }),
+      set: nat('set', ([o, k, v]) => { const n = nodeOf(o), key = fmt(k); const hit = n.attrs.find(([a]) => a === key); if (hit) hit[1] = fmt(v); else n.attrs.push([key, fmt(v)]); return V.none; }),
+      keys: nat('keys', ([o]) => V.list(nodeOf(o).attrs.map(([k]) => V.str(k)))),
+      items: nat('items', ([o]) => V.list(nodeOf(o).attrs.map(([k, v]) => V.tuple([V.str(k), V.str(v)])))),
+      find: nat('find', ([o, p]) => { const r = etSelect(nodeOf(o), fmt(p)); return r.length ? wrap(r[0]) : V.none; }),
+      findall: nat('findall', ([o, p]) => V.list(etSelect(nodeOf(o), fmt(p)).map(wrap))),
+      findtext: nat('findtext', ([o, p, d], kw) => { const r = etSelect(nodeOf(o), fmt(p)); const def = d || kw.default || V.none; return r.length ? V.str(r[0].text || '') : def; }),
+      iter: nat('iter', ([o, t]) => { const n = nodeOf(o), want = t && t.t !== 'NoneType' ? fmt(t) : null; const all = [n, ...allBelow(n)].filter(x => !want || want === '*' || x.tag === want).map(wrap); let i = 0; return mkIter('generator', () => (i < all.length ? all[i++] : DONE)); }),
+      itertext: nat('itertext', ([o]) => { const out = []; const walk = n => { if (n.text) out.push(n.text); for (const k of n.kids) { walk(k); if (k.tail) out.push(k.tail); } }; walk(nodeOf(o)); let i = 0; return mkIter('generator', () => (i < out.length ? V.str(out[i++]) : DONE)); }),
+      append: nat('append', ([o, c]) => { const n = nodeOf(o), k = nodeOf(c); k.parent = n; n.kids.push(k); return V.none; }),
+      __iter__: nat('__iter__', ([o]) => { const kids = nodeOf(o).kids.slice(); let i = 0; return mkIter('iterator', () => (i < kids.length ? wrap(kids[i++]) : DONE)); }),
+      __len__: nat('__len__', ([o]) => V.int(nodeOf(o).kids.length)),
+      __getitem__: nat('__getitem__', ([o, i]) => { const kids = nodeOf(o).kids; let k = needInt(i); if (k < 0) k += kids.length; if (k < 0 || k >= kids.length) throw new PyError('IndexError', 'child index out of range'); return wrap(kids[k]); }),
+      __repr__: nat('__repr__', ([o]) => V.str(`<Element ${strRepr(nodeOf(o).tag)}>`)),
+    };
+    for (const k in dict2) EL.dict.set(k, dict2[k]);
+    const newEl = (tag, attrib, parent) => { const node = { tag: fmt(tag), attrs: dictEntries(attrib), kids: [], text: null, tail: null, parent: parent || null }; if (parent) parent.kids.push(node); return wrap(node); };
+    const TREE = makeClass('ElementTree', [], {});
+    TREE.dict.set('getroot', nat('getroot', ([t]) => t.attrs.get('_root')));
+    TREE.dict.set('find', nat('find', ([t, p]) => callValue(getAttr(t.attrs.get('_root'), 'find', ctx), [p], {}, ctx)));
+    TREE.dict.set('findall', nat('findall', ([t, p]) => callValue(getAttr(t.attrs.get('_root'), 'findall', ctx), [p], {}, ctx)));
+    TREE.dict.set('write', nat('write', ([t, path], kw) => { const name = normPath(fsPathOf(path)); const text = serializeNode(t.attrs.get('_root').node); ctx.fs.set(name, text); ctx.emit({ kind: 'file', name, text }); return V.none; }));
+    const treeOf = rootEl => ({ t: 'instance', cls: TREE, attrs: new Map([['_root', rootEl]]) });
+    const fromText = text => { const doc = parseMarkup(text, false); return wrap(doc.kids[0]); };
+    return mkModule('xml.etree.ElementTree', {
+      Element: nat('Element', ([tag, attrib], kw) => newEl(tag, attrib)),
+      SubElement: nat('SubElement', ([parent, tag, attrib]) => newEl(tag, attrib, nodeOf(parent))),
+      fromstring: nat('fromstring', ([t]) => { if (!t || t.t !== 'str') throw new PyError('TypeError', 'fromstring() needs a string'); return fromText(t.v); }),
+      XML: nat('XML', ([t]) => fromText(fmt(t))),
+      parse: nat('parse', ([p]) => { const name = normPath(fsPathOf(p)); if (!ctx.fs.has(name)) throw noFile(fsPathOf(p)); return treeOf(fromText(ctx.fs.get(name))); }),
+      tostring: nat('tostring', ([e], kw) => V.str(serializeNode(nodeOf(e)).replace(/(\S)$/, '$1'))),
+      ElementTree: nat('ElementTree', ([e], kw) => treeOf(e || kw.element)),
+    });
+  }
+  const MODULES = { copy: makeCopy, 'xml.etree.ElementTree': makeEtree, datetime: makeDatetime, logging: makeLogging, pathlib: makePathlib, os: makeOs, 'os.path': ctx => makeOs(ctx).members.get('path'), shutil: makeShutil, argparse: makeArgparse, random: makeRandom, math: makeMath, statistics: makeStatistics, json: makeJson, csv: makeCsv, sys: makeSys, re: makeRe, pytest: makePytest, requests: makeRequests, string: STRING_MOD };
   function loadModule(name, ctx) {
     if (ctx.modules[name]) return ctx.modules[name];
     if (ctx.userModules && ctx.userModules[name]) return (ctx.modules[name] = runUserModule(name, ctx));
