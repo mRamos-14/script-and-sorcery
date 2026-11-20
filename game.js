@@ -13,13 +13,24 @@
   const SAVE_KEY = 'script-sorcery-v1';
   const DEFAULT_HERO = { name: 'Pip', hair: 1, skin: 1, robe: 0, hat: 1, gem: 0, hatStyle: 'wizard', pet: 'none' };
   const DEFAULT_SETTINGS = { mute: false, music: true, sfx: true, musicVol: 0.6, sfxVol: 0.8, vibrate: true };
-  function freshSave() { return { hero: null, done: {}, xp: 0, gold: 0, streak: 0, lastDay: null, settings: { ...DEFAULT_SETTINGS }, world: 0, arenaBest: 0, towerBest: 0, daily: null, weak: {}, hard: {}, mode: 'normal', owned: { hats: ['wizard', 'none'], pets: ['none'] } }; }
+  function freshSave() { return { ver: 2, hero: null, done: {}, xp: 0, gold: 0, streak: 0, lastDay: null, settings: { ...DEFAULT_SETTINGS }, world: 0, arenaBest: 0, towerBest: 0, daily: null, weak: {}, hard: {}, mode: 'normal', owned: { hats: ['wizard', 'none'], pets: ['none'] } }; }
+  // version 1 had 18 worlds; they moved to their places in the 51-world path
+  const OLD_TO_NEW = { 1: 1, 2: 3, 3: 5, 4: 6, 5: 7, 6: 9, 7: 11, 8: 13, 9: 14, 10: 21, 11: 22, 12: 23, 13: 26, 14: 29, 15: 32, 16: 39, 17: 40, 18: 41 };
+  function migrateTo51(s) {
+    const mv = o => { const n = {}; for (const k in o || {}) { const m = /^(\d+)-(.+)$/.exec(k); n[m && OLD_TO_NEW[m[1]] ? OLD_TO_NEW[m[1]] + '-' + m[2] : k] = o[k]; } return n; };
+    s.done = mv(s.done);
+    s.hard = mv(s.hard);
+    s.world = (OLD_TO_NEW[(s.world || 0) + 1] || 1) - 1;
+    s.ver = 2;
+  }
   function loadSave() {
     let s = null;
     try { s = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { /* storage blocked */ }
     if (!s || typeof s !== 'object') return freshSave();
+    const old = !s.ver;
     const base = freshSave();
     for (const k in base) if (s[k] === undefined) s[k] = base[k];
+    if (old) migrateTo51(s);
     if (!s.owned.hats) s.owned.hats = ['wizard', 'none'];
     if (!s.owned.pets) s.owned.pets = ['none'];
     if (s.hero) s.hero = { ...DEFAULT_HERO, ...s.hero };
@@ -532,10 +543,13 @@
   /* ---------------- map ---------------- */
   // Hard worlds open once every world is beaten; they keep their own stars
   const allBeaten = () => WORLDS.every(w => w.levels.every(l => l.late || save.done[l.id]));
-  const inHard = () => save.mode === 'hard' && allBeaten();
+  // once Hard opens it stays open, even when new worlds arrive
+  const hardOpen = () => !!save.hardOpen || (allBeaten() && (save.hardOpen = true));
+  const inHard = () => save.mode === 'hard' && hardOpen();
   const prog = () => (inHard() ? save.hard || (save.hard = {}) : save.done);
   // levels added in later updates (late: true) never lock a world you already cleared
-  const worldUnlocked = w => w === 0 || WORLDS[w - 1].levels.every(l => l.late || prog()[l.id]);
+  const worldBeaten = w => WORLDS[w].levels.every(l => l.late || prog()[l.id]);
+  const worldUnlocked = w => w === 0 || WORLDS[w].levels.some(l => prog()[l.id]) || (worldUnlocked(w - 1) && worldBeaten(w - 1));
   const levelUnlocked = (w, i) => !!prog()[WORLDS[w].levels[i].id] || (i === 0 ? worldUnlocked(w) : !!prog()[WORLDS[w].levels[i - 1].id]);
   /* ---------------- hero growth ----------------
      Each level needs a bit more XP than the last, so levels keep coming all game.
@@ -634,7 +648,12 @@
     };
     $('#map-sub').textContent = `${W.name} · ${W.topic}`;
     if (currentScreen === 'map') updateMusic();
-    $('#map-wrap').style.backgroundImage = `url(assets/${W.map})`;
+    $('#map-bg').style.backgroundImage = `url(assets/${W.map})`;
+    $('#map-bg').style.filter = W.mapFilter || '';
+    $('#w-cur').onclick = () => { sfx('tap'); openWorldList(); };
+    $('#map-soon').hidden = !W.soon;
+    $('#map-hero').hidden = !!W.soon;
+    if (W.soon) $('#map-soon').innerHTML = `<p class="soon-act">${esc(W.act || '')}</p><h3>World ${W.id} · ${esc(W.name)}</h3><p>${esc(W.topic)}</p><p class="soon-src">From: ${esc(W.src || '')}</p><p class="soon-note">This world is still being built. It never blocks your path: walk on to World ${W.id + 1}.</p>`;
     const box = $('#map-nodes');
     box.innerHTML = '';
     const pts = W.nodes.map(([x, y]) => `${x},${y}`).join(' ');
@@ -659,6 +678,7 @@
     });
     if (current === -1) current = W.levels.length - 1;
     const mh = $('#map-hero');
+    if (W.soon) { $('#map-banner').hidden = true; const hb0 = $('#btn-hard'); hb0.hidden = !hardOpen(); return; }
     mh.style.left = W.nodes[current][0] + '%';
     mh.style.top = W.nodes[current][1] + '%';
     mh.classList.toggle('below', W.nodes[current][1] < 15);
@@ -667,7 +687,7 @@
     const allDone = W.levels.every(l => l.late || P[l.id]);
     // Normal / Hard switch, once every world is beaten
     const hb = $('#btn-hard');
-    hb.hidden = !allBeaten();
+    hb.hidden = !hardOpen();
     hb.textContent = hardMap ? 'Worlds: Hard' : 'Worlds: Normal';
     hb.classList.toggle('ghost', !hardMap);
     hb.classList.toggle('hard-on', hardMap);
@@ -685,6 +705,26 @@
     else $('#map-banner').textContent = nextW ? `World ${W.id} cleared! World ${nextW.id}, ${/^the /i.test(nextW.name) ? nextW.name : 'the ' + nextW.name}, is open. Switch worlds above.` : `World ${W.id} cleared! More worlds are coming. Keep sharp in the Training grounds.`;
     if (!hardMap && !nextW && allBeaten()) $('#map-banner').textContent = 'Every world is beaten! Hard worlds are open: tap "Worlds: Normal" above the map to switch.';
   }
+  // every world at a glance, grouped by act
+  function openWorldList() {
+    const box = $('#world-list'), P = prog();
+    let html = '', act = '';
+    WORLDS.forEach((w, i) => {
+      if (w.act !== act) { act = w.act; html += `<h3 class="wl-act">${esc(act || '')}</h3>`; }
+      const open = worldUnlocked(i), n = w.levels.filter(l => !l.late).length, d = w.levels.filter(l => !l.late && P[l.id]).length;
+      const state = w.soon ? 'being built' : !open ? 'locked' : d === n ? 'cleared' : d ? `${d}/${n}` : 'open';
+      html += `<button class="wl-row${i === save.world ? ' on' : ''}${open ? '' : ' locked'}${w.soon ? ' soon' : ''}" data-w="${i}"><b>${w.id}</b><span class="wl-name">${esc(w.name)}<small>${esc(w.topic)}</small></span><span class="wl-state">${state}</span></button>`;
+    });
+    $('#world-list-body').innerHTML = html;
+    box.hidden = false;
+    $('#world-list-body').querySelectorAll('.wl-row').forEach(b => b.onclick = () => {
+      const i = +b.dataset.w;
+      if (!worldUnlocked(i)) { sfx('bad'); toast('Beat the worlds before it to open this one.'); return; }
+      sfx('tap'); save.world = i; persist(); box.hidden = true; renderMap();
+    });
+    const cur = $('#world-list-body .wl-row.on'); if (cur) cur.scrollIntoView({ block: 'center' });
+  }
+  $('#world-list-close').onclick = () => { sfx('tap'); $('#world-list').hidden = true; };
   const ARROW_L = '<svg viewBox="0 0 6 8" width="12" height="16" aria-hidden="true" shape-rendering="crispEdges"><path fill="currentColor" d="M4 0h1v8H4V7H3V6H2V5H1V3h1V2h1V1h1z"/></svg>';
   const ARROW_R = '<svg viewBox="0 0 6 8" width="12" height="16" aria-hidden="true" shape-rendering="crispEdges"><path fill="currentColor" d="M1 0h1v1h1v1h1v1h1v2H4v1H3v1H2v1H1z"/></svg>';
   function lockSvg() {

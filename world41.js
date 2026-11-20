@@ -1,14 +1,14 @@
-/* World 18: The River of Time. Iterators and next(), generator functions with yield,
+/* World 41: The River of Time. Iterators and next(), generator functions with yield,
    endless generators, generator expressions, dict and set comprehensions, nested
    comprehensions and generator pipelines. Ends with 18-R The Last Gate (Worlds 1 to 18). */
 const BOATS = ['raft', 'skiff', 'canoe', 'barge', 'ferry'];
 
-const WORLD18 = {
-  id: 18, name: 'The River of Time', topic: 'iterators, generators and comprehensions', map: 'bg-map18.jpg',
+const WORLD41 = {
+  id: 41, name: 'The River of Time', topic: 'iterators, generators and comprehensions', map: 'bg-map18.jpg',
   nodes: [[50, 93], [28, 84], [70, 76], [32, 67], [68, 58], [30, 49], [68, 40], [34, 30], [64, 20], [50, 8]],
   levels: [
     {
-      id: '18-1', title: 'One at a time', bg: 'river', npc: 'ferryman', mentor: 'ferryman', tags: ['iterq'],
+      id: '41-1', title: 'One at a time', bg: 'river', npc: 'ferryman', mentor: 'ferryman', tags: ['iterq'],
       steps: [
         { type: 'talk', who: 'ferryman', text: "Climb aboard, {NAME}. I'm Ferryman Oak. On this river things arrive one at a time. iter(items) gives an iterator, and next() takes the next thing from it. A for loop does exactly this behind the scenes." },
         { type: 'demo', vars: R => ({ bs: R.sample(BOATS, 3) }), text: 'Run it.', code: ['boats = iter($(JSON.stringify(bs)))', 'print(next(boats))', 'print(next(boats))', 'print(list(boats))'] },
@@ -43,7 +43,7 @@ const WORLD18 = {
       learn: [{ title: 'Iterators', code: 'it = iter(items)\nnext(it)\nnext(it, "default")', text: 'One item at a time. When empty, next raises StopIteration (or returns the default).' }],
     },
     {
-      id: '18-2', title: 'The yield spell', bg: 'river', npc: 'clockmaker', mentor: 'clockmaker', tags: ['yieldq'],
+      id: '41-2', title: 'The yield spell', bg: 'river', npc: 'clockmaker', mentor: 'clockmaker', tags: ['yieldq'],
       steps: [
         { type: 'talk', who: 'clockmaker', text: "Clockmaker Iva. A function with yield instead of return is a generator. Calling it starts nothing! Each next() runs it until the next yield, then pauses right there until asked again." },
         { type: 'demo', text: 'Run it and watch the lines take turns.', code: ['def countdown(n):', '    while n > 0:', '        print("making", n)', '        yield n', '        n -= 1', 'for x in countdown(3):', '    print("got", x)'] },
@@ -78,7 +78,7 @@ const WORLD18 = {
       learn: [{ title: 'Generators', code: 'def count(n):\n    for i in range(n):\n        yield i', text: 'yield pauses the function and hands back a value. It continues on the next next().' }],
     },
     {
-      id: '18-3', title: 'Endless rivers', bg: 'river', npc: 'ferryman', mentor: 'ferryman', tags: ['infgen'],
+      id: '41-3', title: 'Endless rivers', bg: 'river', npc: 'ferryman', mentor: 'ferryman', tags: ['infgen'],
       steps: [
         { type: 'talk', who: 'ferryman', text: 'Because a generator only works when asked, it can go on forever: while True: yield. You take as much as you need and stop.' },
         { type: 'demo', text: 'Run it.', code: ['def tides():', '    n = 1', '    while True:', '        yield n', '        n *= 2', 'for t in tides():', '    if t > 20:', '        break', '    print(t)'] },
@@ -109,7 +109,7 @@ const WORLD18 = {
       learn: [{ title: 'Endless generators', code: 'while True:\n    yield n', text: 'Values are only made when asked, so a generator can be infinite. Always stop the loop that reads it.' }],
     },
     {
-      id: '18-4', title: 'River spirits', bg: 'rapids', mentor: 'narrator', tags: [],
+      id: '41-4', title: 'River spirits', bg: 'rapids', mentor: 'narrator', tags: [],
       foe: R => { const s = R.int(4, 8), k = 3; return { kind: 'riverspirit', hp: s * k * (k + 1) / 2, s, k }; },
       steps: [
         { type: 'talk', who: 'narrator', text: 'River spirits rise from the rapids! Let a generator feed your spells, one wave at a time.' },
@@ -133,7 +133,7 @@ const WORLD18 = {
       learn: [{ title: 'Generators in battle', code: 'for p in waves(5):\n    cast(fireball, p)', text: 'A generator can drive a loop, producing each value just in time.' }],
     },
     {
-      id: '18-5', title: 'Streams in brackets', bg: 'river', npc: 'clockmaker', mentor: 'clockmaker', tags: ['genexp'],
+      id: '41-5', title: 'Streams in brackets', bg: 'river', npc: 'clockmaker', mentor: 'clockmaker', tags: ['genexp'],
       steps: [
         { type: 'talk', who: 'clockmaker', text: 'A comprehension in round brackets, (x * 2 for x in nums), is a generator expression. It makes values one by one instead of building a whole list. Perfect inside sum(), max() and any().' },
         {
@@ -167,7 +167,7 @@ const WORLD18 = {
       learn: [{ title: 'Generator expressions', code: 'sum(x * x for x in nums)', text: 'Like a list comprehension in round brackets, but lazy and single-use.' }],
     },
     {
-      id: '18-6', title: 'Dictionaries in one line', bg: 'river', npc: 'ferryman', mentor: 'ferryman', tags: ['dictcomp'],
+      id: '41-6', title: 'Dictionaries in one line', bg: 'river', npc: 'ferryman', mentor: 'ferryman', tags: ['dictcomp'],
       steps: [
         { type: 'talk', who: 'ferryman', text: 'Curly brackets make comprehensions too. {k: v for ...} builds a dict, {x for ...} builds a set.' },
         { type: 'demo', vars: R => ({ bs: R.sample(BOATS, 3) }), text: 'Run it.', code: ['boats = $(JSON.stringify(bs))', 'sizes = {b: len(b) for b in boats}', 'print(sizes)'] },
@@ -202,7 +202,7 @@ const WORLD18 = {
       learn: [{ title: 'Dict and set comprehensions', code: '{k: v for k, v in d.items() if v}\n{x % 3 for x in nums}', text: 'Build dicts and sets in one line, with optional filters.' }],
     },
     {
-      id: '18-7', title: 'Rivers within rivers', bg: 'river', npc: 'clockmaker', mentor: 'clockmaker', tags: ['nestcomp'],
+      id: '41-7', title: 'Rivers within rivers', bg: 'river', npc: 'clockmaker', mentor: 'clockmaker', tags: ['nestcomp'],
       steps: [
         { type: 'talk', who: 'clockmaker', text: 'A comprehension can have two for parts, read left to right like nested loops: [x for row in grid for x in row] flattens a grid. And x if test else y can choose each value.' },
         {
@@ -236,7 +236,7 @@ const WORLD18 = {
       learn: [{ title: 'Nested comprehensions', code: '[x for row in grid for x in row]\n["a" if c else "b" for c in cs]', text: 'Two for parts work like nested loops, read left to right.' }],
     },
     {
-      id: '18-8', title: 'The current', bg: 'rapids', mentor: 'narrator', tags: ['pipeline'],
+      id: '41-8', title: 'The current', bg: 'rapids', mentor: 'narrator', tags: ['pipeline'],
       foe: R => ({ kind: 'riverspirit', hp: 80, weak: 'spark', tint: 'big' }),
       steps: [
         { type: 'talk', who: 'narrator', text: 'The whole river turns against you! Chain generators into a pipeline: each one feeds the next, one value at a time.' },
@@ -263,7 +263,7 @@ const WORLD18 = {
       learn: [{ title: 'Pipelines', code: 'for x in evens(source(10)):', text: 'Generators feeding generators: each value flows through the whole chain before the next is made.' }],
     },
     {
-      id: '18-9', title: 'The Leviathan of Time', bg: 'timevortex', foe: { kind: 'leviathan', hp: 260, weak: 'spark', resist: 'fireball' }, mentor: 'narrator', boss: true, tags: [],
+      id: '41-9', title: 'The Leviathan of Time', bg: 'timevortex', foe: { kind: 'leviathan', hp: 260, weak: 'spark', resist: 'fireball' }, mentor: 'narrator', boss: true, tags: [],
       steps: [
         { type: 'talk', who: 'leviathan', text: 'I HAVE SWALLOWED EVERY MOMENT THAT EVER WAS. I YIELD... TO NO ONE.' },
         { type: 'talk', who: 'narrator', text: 'The Leviathan has 260 HP. Spark jolts it for double. Fireball is halved in the water.' },
@@ -296,9 +296,9 @@ const WORLD18 = {
       learn: [{ title: 'The river toolkit', code: 'iter  next  yield  while True\n(x for x in xs)  {k: v for ...}', text: 'Values made one at a time, exactly when they are needed.' }],
     },
     {
-      id: '18-R', title: 'The Last Gate', bg: 'lastgate', foe: { kind: 'gatekeeper', hp: 300 }, mentor: 'narrator', boss: true, review: true, tags: [],
+      id: '41-R', title: 'The Last Gate', bg: 'lastgate', foe: { kind: 'gatekeeper', hp: 300 }, mentor: 'narrator', boss: true, review: true, tags: [],
       steps: [
-        { type: 'talk', who: 'gatekeeper', text: 'Eighteen worlds behind you, {NAME}. Beyond this gate there is no map, only what you build yourself. Show me everything.' },
+        { type: 'talk', who: 'gatekeeper', text: 'Forty-one worlds behind you, {NAME}. Beyond this gate the oldest magic waits. Show me everything.' },
         { type: 'talk', who: 'narrator', text: 'The final review! Every world, mixed together. 300 HP. Each right answer strikes.' },
         { type: 'review', tags: ['print', 'vars', 'fstr', 'methods', 'ifelse', 'logic'], reward: { spell: 'spark', power: 20 }, text: 'Where it began. What will it say?' },
         { type: 'review', tags: ['forloop', 'while', 'lists', 'comp', 'dicts', 'dictloop'], reward: { spell: 'fireball', power: 20 }, text: 'Loops and collections. What will it say?' },
@@ -331,7 +331,7 @@ const WORLD18 = {
     },
   ],
 };
-WORLDS.push(WORLD18);
+WORLDS.push(WORLD41);
 
 /* Hand-written wrong answers for predict steps where mutating the code cannot
    produce believable alternatives (regex, tests, class behaviour). They are templates
@@ -344,52 +344,52 @@ WORLDS.push(WORLD18);
       st.wrong = (st.wrong || []).concat(wrong);
     }
   };
-  W('11-1', 3, ['I am $n / Error', '$n charges! / I am $n', 'I am $n / I am $n charges!']);
-  W('11-2', 3, ['hero / knight / hero', 'hero / knight / Error', 'hero / hero / hero']);
-  W('11-3', 3, ['and armored', 'brave', 'brave / and armored']);
-  W('11-5', 2, ['False False', 'True True', 'False True']);
-  W('12-5', 3, ['Bot Bot', 'Drone Drone', 'cls cls']);
-  W('13-3', 4, ['$b', '3', "['$a', '$b']"]);
-  W('13-5', 3, ['hello, greet.py', 'Usage: python greet.py NAME / hello,', 'hello,']);
-  W('13-7', 3, ['tools running / main program __main__', 'main program tools', 'tools running / main program tools']);
-  W('14-1', 3, ['True True', 'False False', 'False True']);
-  W('14-1', 4, ['$c $(x + 1) $(x + c.length)', '$c $x $(x + c.length - 1)', '$c 0 $(c.length)']);
-  W('14-1', 5, ['$(c.toUpperCase())', 'True', 'False']);
-  W('14-2', 3, ['goal 4', 'o $n', 'g$("o".repeat(n))al $(n + 2)']);
-  W('14-2', 4, ['True / False / False', 'True / True / True', 'False / True / False']);
-  W('14-3', 3, ['[$a, $b, $c] $(a + b + c)', "['$a', '$b', '$c'] $a$b$c", "['$a$b$c'] $(a + b + c)"]);
-  W('14-3', 4, ["['hop,', 'skip', '&', 'jump!']", "['hop', ',', 'skip', '&', 'jump', '!']", "['hop', 'skip', 'jump!']"]);
-  W('14-5', 1, ['True / True', 'False / True', 'False / False']);
-  W('14-7', 1, ["['42', '314', '2718']", "['42', '314', '271', '8']", "['7', '42', '314', '2718']"]);
-  W('14-7', 3, ['False False', 'True True', 'False True', 'True False']);
-  W('14-8', 1, ['toomanyspaces', 'too    many   spaces', 'too many  spaces']);
-  W('14-8', 2, ['$a $b', '\\2 \\1', '$b$a']);
-  W('15-1', 2, ['first check passed', 'second check passed', 'first check passed / AssertionError']);
-  W('15-1', 4, ['caught: AssertionError', 'caught:', '$n']);
-  W('15-3', 1, ['test_initial PASSED / test_empty PASSED / == 2 passed ==', 'test_initial PASSED / test_empty FAILED - assert \'\' == \'\' / == 1 failed, 1 passed ==', 'test_initial FAILED - IndexError: string index out of range / == 1 failed ==']);
-  W('15-3', 2, ['test_two PASSED / test_none PASSED / == 2 passed ==', 'test_two PASSED / test_none FAILED - assert 0 == 0 / == 1 failed, 1 passed ==', 'test_two FAILED - ZeroDivisionError: division by zero / test_none FAILED - ZeroDivisionError: division by zero / == 2 failed ==']);
-  W('15-6', 2, ['test_evens PASSED / test_odds FAILED - assert False / == 1 failed, 1 passed ==', 'test_evens PASSED / == 1 passed ==', 'test_evens FAILED - assert False / test_odds FAILED - assert False / == 2 failed ==']);
-  W('15-7', 1, ['test_greet PASSED / == 1 passed ==', '== no tests ran ==', "test_greet FAILED - assert None == 'hello, Ada' / == 1 failed =="]);
-  W('16-2', 3, ['{$a, 6} {$b}', '{$a, $b, 6, 7} {$a, 6, 7}', '{$b} {$a, 6, 7}']);
-  W('16-2', 2, ['[]', "$('[' + JSON.parse(A).sort().map(w => \"'\" + w + \"'\").join(', ') + ']')"]);
-  W('16-5', 1, ["$('[' + ws.slice().sort().map(w => \"'\" + w + \"'\").join(', ') + ']')", "$('[' + ws.map(w => \"'\" + w + \"'\").join(', ') + ']')", "$('[' + ws.slice().sort((a, b) => b.length - a.length).map(w => \"'\" + w + \"'\").join(', ') + ']')"]);
-  W('16-5', 3, ["['apple', 'banana', 'Cherry'] / ['apple', 'banana', 'Cherry']", "['Cherry', 'apple', 'banana'] / ['Cherry', 'apple', 'banana']", "['apple', 'banana', 'Cherry'] / ['Cherry', 'apple', 'banana']"]);
-  W('17-1', 2, ['1 1 3', '0 1 1', '0 3 3']);
-  W('17-1', 3, ['Salaam $(ns[0]) $(ns[1])', 'Salaam / $(ns[0]) / $(ns[1])', '$(ns[0]) Salaam / $(ns[1]) Salaam']);
-  W('17-2', 2, ['2 $c', '(2, $c)', "('$c', 2)"]);
-  W('17-5', 1, ['$(ws[0]) $(ws[1])', "$(ws[0]) ('$(ws[1])', '$(ws[2])', '$(ws[3])')", "['$(ws[0])'] ['$(ws[1])', '$(ws[2])', '$(ws[3])']"]);
-  W('17-5', 2, ['1 $(ws[3])', '3 $(ws[0])', '4 $(ws[3])']);
-  W('18-1', 2, ['$(bs[0]) / $(bs[1]) / $(bs[2])', '$(bs[0]) / $(bs[1])', '$(bs[2])']);
-  W('18-1', 4, ['$b / $b', 'empty / empty', '$b / StopIteration']);
-  W('18-5', 3, ['True 6', 'False 6', 'True 9', 'False 9']);
-  W('2-2', 6, ['$(w.toUpperCase())', '$w', 'upper']);
-  W('5-7', 2, ["['$a,$b,$c']", '$a $b $c', "['$a', ',', '$b', ',', '$c']"]);
-  W('5-7', 5, ['$a$b$c', "['$a', '$b', '$c']", '$a$s$b$c']);
-  W('6-3', 3, ['3', 'gold', 'KeyError']);
-  W('8-2', 3, ['Got $s', 'Bad number', 'Got $s / Bad number', 'ValueError']);
-  W('8-3', 2, ['Missing key', 'Unknown name', '1']);
-  W('8-3', 4, ['Oops: IndexError', 'Oops:', 'Oops: $i']);
-  W('8-5', 2, ['good: $n / door closed', 'bad', 'door closed', 'good: $n']);
-  W('8-6', 3, ['Caught: ValueError', 'Caught: -$x', '-$x']);
-  W('9-6', 3, ['$w$w', 'FileNotFoundError', '(empty)']);
+  W('22-1', 3, ['I am $n / Error', '$n charges! / I am $n', 'I am $n / I am $n charges!']);
+  W('22-2', 3, ['hero / knight / hero', 'hero / knight / Error', 'hero / hero / hero']);
+  W('22-3', 3, ['and armored', 'brave', 'brave / and armored']);
+  W('22-5', 2, ['False False', 'True True', 'False True']);
+  W('23-5', 3, ['Bot Bot', 'Drone Drone', 'cls cls']);
+  W('26-3', 4, ['$b', '3', "['$a', '$b']"]);
+  W('26-5', 3, ['hello, greet.py', 'Usage: python greet.py NAME / hello,', 'hello,']);
+  W('26-7', 3, ['tools running / main program __main__', 'main program tools', 'tools running / main program tools']);
+  W('29-1', 3, ['True True', 'False False', 'False True']);
+  W('29-1', 4, ['$c $(x + 1) $(x + c.length)', '$c $x $(x + c.length - 1)', '$c 0 $(c.length)']);
+  W('29-1', 5, ['$(c.toUpperCase())', 'True', 'False']);
+  W('29-2', 3, ['goal 4', 'o $n', 'g$("o".repeat(n))al $(n + 2)']);
+  W('29-2', 4, ['True / False / False', 'True / True / True', 'False / True / False']);
+  W('29-3', 3, ['[$a, $b, $c] $(a + b + c)', "['$a', '$b', '$c'] $a$b$c", "['$a$b$c'] $(a + b + c)"]);
+  W('29-3', 4, ["['hop,', 'skip', '&', 'jump!']", "['hop', ',', 'skip', '&', 'jump', '!']", "['hop', 'skip', 'jump!']"]);
+  W('29-5', 1, ['True / True', 'False / True', 'False / False']);
+  W('29-7', 1, ["['42', '314', '2718']", "['42', '314', '271', '8']", "['7', '42', '314', '2718']"]);
+  W('29-7', 3, ['False False', 'True True', 'False True', 'True False']);
+  W('29-8', 1, ['toomanyspaces', 'too    many   spaces', 'too many  spaces']);
+  W('29-8', 2, ['$a $b', '\\2 \\1', '$b$a']);
+  W('32-1', 2, ['first check passed', 'second check passed', 'first check passed / AssertionError']);
+  W('32-1', 4, ['caught: AssertionError', 'caught:', '$n']);
+  W('32-3', 1, ['test_initial PASSED / test_empty PASSED / == 2 passed ==', 'test_initial PASSED / test_empty FAILED - assert \'\' == \'\' / == 1 failed, 1 passed ==', 'test_initial FAILED - IndexError: string index out of range / == 1 failed ==']);
+  W('32-3', 2, ['test_two PASSED / test_none PASSED / == 2 passed ==', 'test_two PASSED / test_none FAILED - assert 0 == 0 / == 1 failed, 1 passed ==', 'test_two FAILED - ZeroDivisionError: division by zero / test_none FAILED - ZeroDivisionError: division by zero / == 2 failed ==']);
+  W('32-6', 2, ['test_evens PASSED / test_odds FAILED - assert False / == 1 failed, 1 passed ==', 'test_evens PASSED / == 1 passed ==', 'test_evens FAILED - assert False / test_odds FAILED - assert False / == 2 failed ==']);
+  W('32-7', 1, ['test_greet PASSED / == 1 passed ==', '== no tests ran ==', "test_greet FAILED - assert None == 'hello, Ada' / == 1 failed =="]);
+  W('39-2', 3, ['{$a, 6} {$b}', '{$a, $b, 6, 7} {$a, 6, 7}', '{$b} {$a, 6, 7}']);
+  W('39-2', 2, ['[]', "$('[' + JSON.parse(A).sort().map(w => \"'\" + w + \"'\").join(', ') + ']')"]);
+  W('39-5', 1, ["$('[' + ws.slice().sort().map(w => \"'\" + w + \"'\").join(', ') + ']')", "$('[' + ws.map(w => \"'\" + w + \"'\").join(', ') + ']')", "$('[' + ws.slice().sort((a, b) => b.length - a.length).map(w => \"'\" + w + \"'\").join(', ') + ']')"]);
+  W('39-5', 3, ["['apple', 'banana', 'Cherry'] / ['apple', 'banana', 'Cherry']", "['Cherry', 'apple', 'banana'] / ['Cherry', 'apple', 'banana']", "['apple', 'banana', 'Cherry'] / ['Cherry', 'apple', 'banana']"]);
+  W('40-1', 2, ['1 1 3', '0 1 1', '0 3 3']);
+  W('40-1', 3, ['Salaam $(ns[0]) $(ns[1])', 'Salaam / $(ns[0]) / $(ns[1])', '$(ns[0]) Salaam / $(ns[1]) Salaam']);
+  W('40-2', 2, ['2 $c', '(2, $c)', "('$c', 2)"]);
+  W('40-5', 1, ['$(ws[0]) $(ws[1])', "$(ws[0]) ('$(ws[1])', '$(ws[2])', '$(ws[3])')", "['$(ws[0])'] ['$(ws[1])', '$(ws[2])', '$(ws[3])']"]);
+  W('40-5', 2, ['1 $(ws[3])', '3 $(ws[0])', '4 $(ws[3])']);
+  W('41-1', 2, ['$(bs[0]) / $(bs[1]) / $(bs[2])', '$(bs[0]) / $(bs[1])', '$(bs[2])']);
+  W('41-1', 4, ['$b / $b', 'empty / empty', '$b / StopIteration']);
+  W('41-5', 3, ['True 6', 'False 6', 'True 9', 'False 9']);
+  W('3-2', 6, ['$(w.toUpperCase())', '$w', 'upper']);
+  W('7-7', 2, ["['$a,$b,$c']", '$a $b $c', "['$a', ',', '$b', ',', '$c']"]);
+  W('7-7', 5, ['$a$b$c', "['$a', '$b', '$c']", '$a$s$b$c']);
+  W('9-3', 3, ['3', 'gold', 'KeyError']);
+  W('13-2', 3, ['Got $s', 'Bad number', 'Got $s / Bad number', 'ValueError']);
+  W('13-3', 2, ['Missing key', 'Unknown name', '1']);
+  W('13-3', 4, ['Oops: IndexError', 'Oops:', 'Oops: $i']);
+  W('13-5', 2, ['good: $n / door closed', 'bad', 'door closed', 'good: $n']);
+  W('13-6', 3, ['Caught: ValueError', 'Caught: -$x', '-$x']);
+  W('14-6', 3, ['$w$w', 'FileNotFoundError', '(empty)']);
 })();

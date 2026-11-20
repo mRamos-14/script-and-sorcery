@@ -1,14 +1,14 @@
-/* World 15: The Proving Grounds. Testing: assert, pytest-style test_ functions (steps with
+/* World 32: The Proving Grounds. Testing: assert, pytest-style test_ functions (steps with
    pytest: true run every test_ function after the spell, like the pytest command), edge
    cases, pytest.raises, many cases per test, tests first. Ends with review boss 15-R. */
 const SQ = ['def square(n):', '    return n * n'];
 
-const WORLD15 = {
-  id: 15, name: 'The Proving Grounds', topic: 'testing', map: 'bg-map15.jpg',
+const WORLD32 = {
+  id: 32, name: 'The Proving Grounds', topic: 'testing', map: 'bg-map15.jpg',
   nodes: [[50, 93], [28, 84], [70, 76], [32, 67], [68, 58], [30, 49], [68, 40], [34, 30], [64, 20], [50, 8]],
   levels: [
     {
-      id: '15-1', title: 'Prove it', bg: 'proving', npc: 'inspector', mentor: 'inspector', tags: ['asserts'],
+      id: '32-1', title: 'Prove it', bg: 'proving', npc: 'inspector', mentor: 'inspector', tags: ['asserts'],
       steps: [
         { type: 'talk', who: 'inspector', text: "Inspector Vale. Here nothing is trusted until it is proven. assert checks that something is true. If it is, nothing happens. If not, Python stops with AssertionError." },
         { type: 'demo', vars: R => ({ n: R.int(2, 9) }), text: 'Run it.', code: [...SQ, 'assert square($n) == $(n * n)', 'assert square(0) == 0', 'print("square works")'] },
@@ -43,7 +43,7 @@ const WORLD15 = {
       learn: [{ title: 'assert', code: 'assert square(3) == 9\nassert ok, "message"', text: 'Silent when true, AssertionError when false. The simplest test.' }],
     },
     {
-      id: '15-2', title: 'The test runner', bg: 'proving', npc: 'apprentice', mentor: 'apprentice', tags: ['pytestq'],
+      id: '32-2', title: 'The test runner', bg: 'proving', npc: 'apprentice', mentor: 'apprentice', tags: ['pytestq'],
       steps: [
         { type: 'talk', who: 'apprentice', text: "It's me, Kip! I'm an inspector's apprentice now. Real projects keep tests in functions whose names start with test_. The pytest command finds every one, runs it, and reports PASSED or FAILED." },
         { type: 'demo', vars: R => ({ n: R.int(2, 9) }), pytest: true, text: 'Run it with pytest.', code: ['def double(n):', '    return n * 2', 'def test_double():', '    assert double($n) == $(2 * n)', '    assert double(0) == 0', 'def test_negative():', '    assert double(-1) == -2'] },
@@ -73,7 +73,7 @@ const WORLD15 = {
       learn: [{ title: 'pytest', code: 'def test_square():\n    assert square(3) == 9', text: 'pytest runs every test_ function and reports PASSED or FAILED, showing the values that did not match.' }],
     },
     {
-      id: '15-3', title: 'Edges of the map', bg: 'proving', npc: 'inspector', mentor: 'inspector', tags: ['edge'],
+      id: '32-3', title: 'Edges of the map', bg: 'proving', npc: 'inspector', mentor: 'inspector', tags: ['edge'],
       steps: [
         { type: 'talk', who: 'inspector', text: 'Bugs hide at the edges: zero, negatives, empty strings, a single item, the biggest value. A good tester always tries them.' },
         {
@@ -103,7 +103,7 @@ const WORLD15 = {
       learn: [{ title: 'Edge cases', code: '0  -1  ""  []  one item  the limit', text: 'Test the boundaries. That is where most bugs live.' }],
     },
     {
-      id: '15-4', title: 'Bug swarm', bg: 'gauntlet', mentor: 'narrator', tags: [],
+      id: '32-4', title: 'Bug swarm', bg: 'gauntlet', mentor: 'narrator', tags: [],
       foe: R => { const k = R.int(3, 5); return { kind: 'bugswarm', hp: k * k, k }; },
       steps: [
         { type: 'talk', who: 'narrator', text: 'A swarm of bugs pours out of the gauntlet! These tests cast a spell only when their assert passes. Fix the code and the tests fight for you.' },
@@ -126,7 +126,7 @@ const WORLD15 = {
       learn: [{ title: 'Green tests', code: 'assert power(3) == 9', text: 'When a test fails, fix the code it tests, not the test.' }],
     },
     {
-      id: '15-5', title: 'Expecting trouble', bg: 'proving', npc: 'apprentice', mentor: 'apprentice', tags: ['raisesq'],
+      id: '32-5', title: 'Expecting trouble', bg: 'proving', npc: 'apprentice', mentor: 'apprentice', tags: ['raisesq'],
       steps: [
         { type: 'talk', who: 'apprentice', text: 'Sometimes the right answer is an error! with pytest.raises(ValueError): passes only if the code inside raises that error.' },
         { type: 'demo', pytest: true, text: 'Run it with pytest.', code: ['import pytest', 'def check_age(age):', '    if age < 0:', '        raise ValueError("age cannot be negative")', '    return age', 'def test_negative():', '    with pytest.raises(ValueError):', '        check_age(-1)'] },
@@ -151,7 +151,7 @@ const WORLD15 = {
       learn: [{ title: 'pytest.raises', code: 'with pytest.raises(ValueError):\n    check_age(-1)', text: 'A test that passes only when the right error happens.' }],
     },
     {
-      id: '15-6', title: 'Many cases', bg: 'proving', npc: 'inspector', mentor: 'inspector', tags: ['cases'],
+      id: '32-6', title: 'Many cases', bg: 'proving', npc: 'inspector', mentor: 'inspector', tags: ['cases'],
       steps: [
         { type: 'talk', who: 'inspector', text: 'One test can check many cases: keep pairs of input and expected answer in a list, and loop.' },
         {
@@ -180,7 +180,7 @@ const WORLD15 = {
       learn: [{ title: 'Table of cases', code: 'for n, want in [(2, 4), (3, 9)]:\n    assert square(n) == want', text: 'Many checks, one test. Easy to add more cases.' }],
     },
     {
-      id: '15-7', title: 'Tests first', bg: 'proving', npc: 'apprentice', mentor: 'apprentice', tags: ['tdd'],
+      id: '32-7', title: 'Tests first', bg: 'proving', npc: 'apprentice', mentor: 'apprentice', tags: ['tdd'],
       steps: [
         { type: 'talk', who: 'apprentice', text: 'Some mages write the tests FIRST, then write code until every test is green. It means you always know when you are done.' },
         {
@@ -206,7 +206,7 @@ const WORLD15 = {
       learn: [{ title: 'Test first', code: 'red: write a failing test\ngreen: make it pass\nrefactor: tidy up', text: 'Tests written first tell you exactly what to build and when you are done.' }],
     },
     {
-      id: '15-8', title: 'The saboteur', bg: 'gauntlet', mentor: 'narrator', tags: [],
+      id: '32-8', title: 'The saboteur', bg: 'gauntlet', mentor: 'narrator', tags: [],
       foe: R => ({ kind: 'bugswarm', hp: 60, weak: 'spark' }),
       steps: [
         { type: 'talk', who: 'narrator', text: 'A saboteur bug swapped symbols in your spells! Only tests can reveal the damage.' },
@@ -233,7 +233,7 @@ const WORLD15 = {
       learn: [{ title: 'Tests catch sabotage', code: 'assert total(2, 3) == 5', text: 'A tiny change like - for + is caught instantly by a test.' }],
     },
     {
-      id: '15-9', title: 'The Grand Inspector', bg: 'tribunal', foe: { kind: 'inspectorboss', hp: 220, weak: 'icebolt', resist: 'spark' }, mentor: 'narrator', boss: true, tags: [],
+      id: '32-9', title: 'The Grand Inspector', bg: 'tribunal', foe: { kind: 'inspectorboss', hp: 220, weak: 'icebolt', resist: 'spark' }, mentor: 'narrator', boss: true, tags: [],
       steps: [
         { type: 'talk', who: 'inspectorboss', text: 'NOTHING PASSES MY INSPECTION. PROVE YOUR SPELLS... OR FAIL.' },
         { type: 'talk', who: 'narrator', text: 'The Grand Inspector has 220 HP. Icebolt freezes the ink in its stamps for double. Spark is halved.' },
@@ -267,7 +267,7 @@ const WORLD15 = {
       learn: [{ title: 'Testing toolkit', code: 'assert  def test_...  pytest\npytest.raises  edge cases  tests first', text: 'CS50P week 5: proving your code works, and keeping it working.' }],
     },
     {
-      id: '15-R', title: 'The Tribunal', bg: 'court', foe: { kind: 'tribunal', hp: 200 }, mentor: 'narrator', boss: true, review: true, tags: [],
+      id: '32-R', title: 'The Tribunal', bg: 'court', foe: { kind: 'tribunal', hp: 200 }, mentor: 'narrator', boss: true, review: true, tags: [],
       steps: [
         { type: 'talk', who: 'tribunal', text: 'WE ARE THE TRIBUNAL. LIBRARIES. PATTERNS. PROOF. ANSWER FOR ALL THREE.' },
         { type: 'talk', who: 'narrator', text: 'Review boss! Worlds 13 to 15, plus older lessons. 200 HP. Each right answer strikes.' },
@@ -300,4 +300,4 @@ const WORLD15 = {
     },
   ],
 };
-WORLDS.push(WORLD15);
+WORLDS.push(WORLD32);

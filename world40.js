@@ -1,14 +1,14 @@
-/* World 17: The Shifting Sands. Flexible functions: *args, **kwargs, unpacking with * and **
+/* World 40: The Shifting Sands. Flexible functions: *args, **kwargs, unpacking with * and **
    in calls and assignments, keyword-only parameters and defaults (including the shared-list
    trap), type hints and docstrings, and the errors that come with them. */
 const GOODS = ['salt', 'silk', 'spice', 'dates', 'amber', 'tea'];
 
-const WORLD17 = {
-  id: 17, name: 'The Shifting Sands', topic: 'flexible functions', map: 'bg-map17.jpg',
+const WORLD40 = {
+  id: 40, name: 'The Shifting Sands', topic: 'flexible functions', map: 'bg-map17.jpg',
   nodes: [[50, 92], [30, 82], [70, 73], [32, 63], [68, 53], [32, 43], [66, 33], [36, 22], [50, 9]],
   levels: [
     {
-      id: '17-1', title: 'Any number of bags', bg: 'desert', npc: 'caravan', mentor: 'caravan', tags: ['argsq'],
+      id: '40-1', title: 'Any number of bags', bg: 'desert', npc: 'caravan', mentor: 'caravan', tags: ['argsq'],
       steps: [
         { type: 'talk', who: 'caravan', text: "Welcome to the Shifting Sands, {NAME}. I'm Zafi, master of this caravan. Some days a trader brings two bags, some days ten. def pack(*bags): accepts any number of values, gathered into a tuple called bags." },
         { type: 'demo', vars: R => ({ a: R.int(1, 9), b: R.int(1, 9), c: R.int(1, 9) }), text: 'Run it.', code: ['def total(*coins):', '    print(coins)', '    return sum(coins)', 'print(total($a, $b, $c))', 'print(total())'] },
@@ -38,7 +38,7 @@ const WORLD17 = {
       learn: [{ title: '*args', code: 'def total(*coins):\n    return sum(coins)', text: 'Gathers any number of positional values into a tuple.' }],
     },
     {
-      id: '17-2', title: 'Labelled bags', bg: 'desert', npc: 'nomad', mentor: 'nomad', tags: ['kwargsq'],
+      id: '40-2', title: 'Labelled bags', bg: 'desert', npc: 'nomad', mentor: 'nomad', tags: ['kwargsq'],
       steps: [
         { type: 'talk', who: 'nomad', text: "Nomad Kesh. Bags with labels! def describe(**traits): gathers every name=value you pass into a dict called traits." },
         { type: 'demo', vars: R => ({ c: R.pick(['gold', 'blue', 'red']), w: R.int(2, 20) }), text: 'Run it.', code: ['def describe(**traits):', '    for key, value in traits.items():', '        print(key, "=", value)', 'describe(color="$c", weight=$w)'] },
@@ -68,7 +68,7 @@ const WORLD17 = {
       learn: [{ title: '**kwargs', code: 'def describe(**traits):\n    traits["color"]', text: 'Gathers any named values into a dict.' }],
     },
     {
-      id: '17-3', title: 'Opening the bags', bg: 'desert', npc: 'caravan', mentor: 'caravan', tags: ['unpackcall'],
+      id: '40-3', title: 'Opening the bags', bg: 'desert', npc: 'caravan', mentor: 'caravan', tags: ['unpackcall'],
       steps: [
         { type: 'talk', who: 'caravan', text: 'The stars work the other way too. f(*items) spreads a list into separate values. f(**opts) spreads a dict into name=value pairs.' },
         { type: 'demo', vars: R => ({ ws: R.sample(GOODS, 3) }), text: 'Run it.', code: ['goods = $(JSON.stringify(ws))', 'print(goods)', 'print(*goods)', 'print(*goods, sep=" | ")'] },
@@ -98,7 +98,7 @@ const WORLD17 = {
       learn: [{ title: 'Spreading values', code: 'f(*items)\nf(**opts)\nprint(*items)', text: '* spreads a list into separate values, ** spreads a dict into named values.' }],
     },
     {
-      id: '17-4', title: 'Sand wurms', bg: 'dunes', mentor: 'narrator', tags: [],
+      id: '40-4', title: 'Sand wurms', bg: 'dunes', mentor: 'narrator', tags: [],
       foe: R => { const xs = [R.int(4, 9), R.int(4, 9), R.int(4, 9)]; return { kind: 'wurm', hp: xs[0] + xs[1] + xs[2], xs }; },
       steps: [
         { type: 'talk', who: 'narrator', text: 'A sand wurm bursts from the dunes! Write a volley spell that casts as many times as you ask.' },
@@ -122,7 +122,7 @@ const WORLD17 = {
       learn: [{ title: 'Volleys', code: 'def volley(*powers): ...\nvolley(*waves)', text: 'Gather with * in the def, spread with * in the call.' }],
     },
     {
-      id: '17-5', title: 'Splitting the load', bg: 'desert', npc: 'nomad', mentor: 'nomad', tags: ['unpackassign'],
+      id: '40-5', title: 'Splitting the load', bg: 'desert', npc: 'nomad', mentor: 'nomad', tags: ['unpackassign'],
       steps: [
         { type: 'talk', who: 'nomad', text: 'Unpacking splits a list into jars: a, b = pair. A star jar takes the leftovers: first, *rest = items. And a, b = b, a swaps two jars in one line.' },
         {
@@ -161,7 +161,7 @@ const WORLD17 = {
       learn: [{ title: 'Unpacking', code: 'a, b = pair\nfirst, *rest = items\na, b = b, a', text: 'Split sequences into jars. A star jar collects what is left.' }],
     },
     {
-      id: '17-6', title: 'Named only', bg: 'desert', npc: 'caravan', mentor: 'caravan', tags: ['kwonly'],
+      id: '40-6', title: 'Named only', bg: 'desert', npc: 'caravan', mentor: 'caravan', tags: ['kwonly'],
       steps: [
         { type: 'talk', who: 'caravan', text: 'Parameters after a bare * must be given by name: def sell(item, *, price). Defaults like def sell(item, price=10) fill in what is missing. One trap: a default list is made once and shared by every call.' },
         {
@@ -197,7 +197,7 @@ const WORLD17 = {
       learn: [{ title: 'Keyword-only and defaults', code: 'def sell(item, *, price, tax=1):\ndef f(bag=None):', text: 'After * a parameter needs its name. Use None, not [], as a default for lists.' }],
     },
     {
-      id: '17-7', title: 'Signposts', bg: 'desert', npc: 'nomad', mentor: 'nomad', tags: ['hints'],
+      id: '40-7', title: 'Signposts', bg: 'desert', npc: 'nomad', mentor: 'nomad', tags: ['hints'],
       steps: [
         { type: 'talk', who: 'nomad', text: 'Signposts help travellers. Type hints like def f(x: int) -> str: tell readers (and tools like mypy) what a function expects. Python itself does not enforce them! A docstring, the string on the first line, explains what it does.' },
         { type: 'demo', vars: R => ({ n: R.int(2, 9) }), text: 'Run it.', code: ['def double(n: int) -> int:', '    """Return n times two."""', '    return n * 2', 'print(double($n))', 'print(double.__doc__)'] },
@@ -228,7 +228,7 @@ const WORLD17 = {
       learn: [{ title: 'Type hints and docstrings', code: 'def f(x: int) -> str:\n    """What f does."""', text: 'Signposts for humans and tools. Python does not check them while running.' }],
     },
     {
-      id: '17-8', title: 'Mirage traps', bg: 'dunes', mentor: 'narrator', tags: ['sigerr'],
+      id: '40-8', title: 'Mirage traps', bg: 'dunes', mentor: 'narrator', tags: ['sigerr'],
       foe: R => ({ kind: 'wurm', hp: 70, weak: 'icebolt' }),
       steps: [
         { type: 'talk', who: 'narrator', text: 'Mirages twist your spell calls! Each one is a real mistake with function arguments.' },
@@ -258,7 +258,7 @@ const WORLD17 = {
       learn: [{ title: 'Argument errors', code: 'unexpected keyword  multiple values\nmissing argument  wrong number to unpack', text: 'Most are TypeError. Read the message: it names the parameter.' }],
     },
     {
-      id: '17-9', title: 'The Sand Titan', bg: 'sandtemple', foe: { kind: 'sandtitan', hp: 250, weak: 'icebolt', resist: 'fireball' }, mentor: 'narrator', boss: true, tags: [],
+      id: '40-9', title: 'The Sand Titan', bg: 'sandtemple', foe: { kind: 'sandtitan', hp: 250, weak: 'icebolt', resist: 'fireball' }, mentor: 'narrator', boss: true, tags: [],
       steps: [
         { type: 'talk', who: 'sandtitan', text: 'I AM MADE OF COUNTLESS GRAINS. HOW WILL YOU STRIKE THEM ALL?' },
         { type: 'talk', who: 'narrator', text: 'The Sand Titan has 250 HP. Icebolt turns its sand to glass for double. Fireball is halved.' },
@@ -292,4 +292,4 @@ const WORLD17 = {
     },
   ],
 };
-WORLDS.push(WORLD17);
+WORLDS.push(WORLD40);

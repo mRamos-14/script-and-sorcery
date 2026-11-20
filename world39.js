@@ -1,15 +1,15 @@
-/* World 16: The Skyward Gardens. Sets and set maths, lambda, sorting with key=,
+/* World 39: The Skyward Gardens. Sets and set maths, lambda, sorting with key=,
    map and filter, zip / enumerate / any / all. Sets of strings are always printed
    through sorted(), because real Python prints them in a different order each run. */
 const FLOWERS = ['rose', 'tulip', 'lily', 'iris', 'daisy', 'orchid', 'poppy', 'violet'];
 const pyL = a => '[' + a.map(x => (typeof x === 'string' ? '"' + x + '"' : x)).join(', ') + ']';
 
-const WORLD16 = {
-  id: 16, name: 'The Skyward Gardens', topic: 'sets, lambda, map and filter', map: 'bg-map16.jpg',
+const WORLD39 = {
+  id: 39, name: 'The Skyward Gardens', topic: 'sets, lambda, map and filter', map: 'bg-map16.jpg',
   nodes: [[50, 92], [28, 82], [70, 73], [34, 63], [68, 53], [30, 43], [66, 33], [38, 22], [50, 9]],
   levels: [
     {
-      id: '16-1', title: 'One of each', bg: 'garden', npc: 'gardener', mentor: 'gardener', tags: ['sets'],
+      id: '39-1', title: 'One of each', bg: 'garden', npc: 'gardener', mentor: 'gardener', tags: ['sets'],
       steps: [
         { type: 'talk', who: 'gardener', text: "Up here among the clouds, {NAME}, I'm Gardener Moss. My seed box holds one of each kind, never two. In Python that is a set: {1, 2, 3}, or set(list) to remove repeats." },
         { type: 'talk', who: 'gardener', text: 'Sets are fast at answering "is this in here?". But they have no order and no positions, so set[0] does not exist.' },
@@ -45,7 +45,7 @@ const WORLD16 = {
       learn: [{ title: 'Sets', code: 'box = set(items)\nbox.add(x)\nx in box', text: 'No repeats, no order, very fast "in". Use sorted() to print them in order.' }],
     },
     {
-      id: '16-2', title: 'Garden maths', bg: 'garden', npc: 'seer', mentor: 'seer', tags: ['setops'],
+      id: '39-2', title: 'Garden maths', bg: 'garden', npc: 'seer', mentor: 'seer', tags: ['setops'],
       steps: [
         { type: 'talk', who: 'seer', text: "Seer Lin. Two gardens, two sets. a | b is everything in either. a & b is only what both share. a - b is in a but not b. a ^ b is in exactly one of them." },
         { type: 'demo', vars: R => { const f = R.sample(FLOWERS, 5); return { A: pyL(f.slice(0, 3)), B: pyL(f.slice(2, 5)) }; }, text: 'Run it.', code: ['north = set($A)', 'south = set($B)', 'print(sorted(north & south))', 'print(sorted(north | south))', 'print(sorted(north - south))'] },
@@ -80,7 +80,7 @@ const WORLD16 = {
       learn: [{ title: 'Set maths', code: 'a | b   a & b   a - b   a ^ b   a <= b', text: 'Union, intersection, difference, one-or-the-other, and subset.' }],
     },
     {
-      id: '16-3', title: 'Tiny spells', bg: 'garden', npc: 'gardener', mentor: 'gardener', tags: ['lambdaq'],
+      id: '39-3', title: 'Tiny spells', bg: 'garden', npc: 'gardener', mentor: 'gardener', tags: ['lambdaq'],
       steps: [
         { type: 'talk', who: 'gardener', text: 'Some spells are so small they fit on a seed packet. lambda x: x * 2 is a function with no name, and its body is a single expression that it returns.' },
         { type: 'demo', vars: R => ({ n: R.int(2, 12) }), text: 'Run it.', code: ['double = lambda x: x * 2', 'grow = lambda h, days=1: h + 3 * days', 'print(double($n), grow(10), grow(10, 4))'] },
@@ -110,7 +110,7 @@ const WORLD16 = {
       learn: [{ title: 'lambda', code: 'double = lambda x: x * 2', text: 'A tiny nameless function: parameters, a colon, and one expression that is returned.' }],
     },
     {
-      id: '16-4', title: 'Thorn sprites', bg: 'thorns', mentor: 'narrator', tags: [],
+      id: '39-4', title: 'Thorn sprites', bg: 'thorns', mentor: 'narrator', tags: [],
       foe: R => { const ps = R.sample([7, 11, 14, 18, 23], 3); return { kind: 'sprite', hp: Math.max(...ps), ps }; },
       steps: [
         { type: 'talk', who: 'narrator', text: 'Thorn sprites zip between the brambles! Pick the strongest spell with max() and a key that tells it what to compare.' },
@@ -134,7 +134,7 @@ const WORLD16 = {
       learn: [{ title: 'max with a key', code: 'max(spells, key=lambda s: s[1])', text: 'key tells max, min and sorted what part of each item to compare.' }],
     },
     {
-      id: '16-5', title: 'Sorting the beds', bg: 'garden', npc: 'seer', mentor: 'seer', tags: ['sortkey'],
+      id: '39-5', title: 'Sorting the beds', bg: 'garden', npc: 'seer', mentor: 'seer', tags: ['sortkey'],
       steps: [
         { type: 'talk', who: 'seer', text: 'sorted(words, key=len) sorts by length. key=str.lower ignores capitals. key=lambda p: p[1] sorts pairs by their second part. reverse=True flips it.' },
         {
@@ -168,7 +168,7 @@ const WORLD16 = {
       learn: [{ title: 'key=', code: 'sorted(xs, key=len)\nsorted(ps, key=lambda p: p[1], reverse=True)', text: 'Sort by any feature: length, a part of a pair, a lowercase version...' }],
     },
     {
-      id: '16-6', title: 'Watering every bed', bg: 'garden', npc: 'gardener', mentor: 'gardener', tags: ['mapfilter'],
+      id: '39-6', title: 'Watering every bed', bg: 'garden', npc: 'gardener', mentor: 'gardener', tags: ['mapfilter'],
       steps: [
         { type: 'talk', who: 'gardener', text: 'map(f, items) applies f to every item. filter(f, items) keeps the items where f gives True. Both hand back a lazy object, so wrap them in list() to see everything.' },
         { type: 'demo', vars: R => ({ ws: R.sample(FLOWERS, 3) }), text: 'Run it.', code: ['beds = $(JSON.stringify(ws))', 'print(map(str.upper, beds))', 'print(list(map(str.upper, beds)))'] },
@@ -203,7 +203,7 @@ const WORLD16 = {
       learn: [{ title: 'map and filter', code: 'list(map(f, xs))\nlist(filter(f, xs))', text: 'Apply a function to everything, or keep what passes a test. A list comprehension does both too.' }],
     },
     {
-      id: '16-7', title: 'Side by side', bg: 'garden', npc: 'seer', mentor: 'seer', tags: ['zipq'],
+      id: '39-7', title: 'Side by side', bg: 'garden', npc: 'seer', mentor: 'seer', tags: ['zipq'],
       steps: [
         { type: 'talk', who: 'seer', text: 'zip(a, b) walks two lists side by side, giving pairs. It stops at the shorter one. any() asks "is at least one True?", all() asks "are all True?".' },
         { type: 'demo', vars: R => ({ ns: R.sample(Engine.NAMES, 3), hs: [R.int(10, 50), R.int(10, 50), R.int(10, 50)] }), text: 'Run it.', code: ['names = $(JSON.stringify(ns))', 'hp = $(JSON.stringify(hs))', 'for name, h in zip(names, hp):', '    print(f"{name}: {h}")'] },
@@ -238,7 +238,7 @@ const WORLD16 = {
       learn: [{ title: 'zip, any, all', code: 'for a, b in zip(xs, ys):\nany(...)  all(...)', text: 'Walk lists together; ask whether some, or every, item passes.' }],
     },
     {
-      id: '16-8', title: 'The tangled grove', bg: 'thorns', mentor: 'narrator', tags: [],
+      id: '39-8', title: 'The tangled grove', bg: 'thorns', mentor: 'narrator', tags: [],
       foe: R => ({ kind: 'sprite', hp: 70, weak: 'fireball', tint: 'big' }),
       steps: [
         { type: 'talk', who: 'narrator', text: 'Vines knot together into a giant bramble sprite! Combine your garden tools to untangle the powers.' },
@@ -265,7 +265,7 @@ const WORLD16 = {
       learn: [{ title: 'Lazy objects', code: 'm = map(...)  # use once\nlist(m)  # keep it', text: 'map, filter and zip give results one at a time and only once. Store them in a list to reuse.' }],
     },
     {
-      id: '16-9', title: 'The Thorn Queen', bg: 'rosethrone', foe: { kind: 'thornqueen', hp: 240, weak: 'fireball', resist: 'icebolt' }, mentor: 'narrator', boss: true, tags: [],
+      id: '39-9', title: 'The Thorn Queen', bg: 'rosethrone', foe: { kind: 'thornqueen', hp: 240, weak: 'fireball', resist: 'icebolt' }, mentor: 'narrator', boss: true, tags: [],
       steps: [
         { type: 'talk', who: 'thornqueen', text: 'Who tramples my perfect, sorted rows? Every rose here is unique, and every thorn is mine.' },
         { type: 'talk', who: 'narrator', text: 'The Thorn Queen has 240 HP. Fireball burns her vines for double. Icebolt is halved.' },
@@ -299,4 +299,4 @@ const WORLD16 = {
     },
   ],
 };
-WORLDS.push(WORLD16);
+WORLDS.push(WORLD39);

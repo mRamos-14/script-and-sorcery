@@ -1,14 +1,14 @@
-/* World 12: The Clockwork Citadel. Class attributes, @property and setters with checks,
+/* World 23: The Clockwork Citadel. Class attributes, @property and setters with checks,
    @classmethod and @staticmethod, composition, debugging objects. Ends with the review
    boss 12-R, The Grand Automaton (Worlds 10 to 12). */
 const PARTS = ['gear', 'spring', 'cog', 'piston', 'valve', 'lever'];
 
-const WORLD12 = {
-  id: 12, name: 'The Clockwork Citadel', topic: 'properties, class methods and composition', map: 'bg-map12.jpg',
+const WORLD23 = {
+  id: 23, name: 'The Clockwork Citadel', topic: 'properties, class methods and composition', map: 'bg-map12.jpg',
   nodes: [[50, 93], [26, 84], [70, 76], [32, 67], [70, 58], [28, 49], [70, 40], [32, 30], [64, 20], [50, 8]],
   levels: [
     {
-      id: '12-1', title: 'Shared gears', bg: 'citadel', npc: 'artificer', mentor: 'artificer', tags: ['classattr'],
+      id: '23-1', title: 'Shared gears', bg: 'citadel', npc: 'artificer', mentor: 'artificer', tags: ['classattr'],
       steps: [
         { type: 'talk', who: 'artificer', text: "I'm Artificer Quinn, keeper of the Citadel's clocks. A jar written inside the class, outside any method, is a class attribute. Every object shares it." },
         { type: 'demo', vars: R => ({ k: R.int(2, 4) }), text: 'Run it. Every automaton built adds one to the shared count.', code: ['class Automaton:', '    count = 0', '    def __init__(self):', '        Automaton.count += 1', 'for i in range($k):', '    Automaton()', 'print(Automaton.count)'] },
@@ -40,7 +40,7 @@ const WORLD12 = {
       learn: [{ title: 'Class attributes', code: 'class Bot:\n    count = 0', text: 'Written in the class body, shared by all objects. Per-object values go in __init__.' }],
     },
     {
-      id: '12-2', title: 'Computed dials', bg: 'citadel', npc: 'warden2', mentor: 'warden2', tags: ['property'],
+      id: '23-2', title: 'Computed dials', bg: 'citadel', npc: 'warden2', mentor: 'warden2', tags: ['property'],
       steps: [
         { type: 'talk', who: 'warden2', text: "Warden Pell. Some values should be worked out, not stored. Put @property above a method and it is read like an attribute: no brackets." },
         { type: 'demo', vars: R => ({ c: R.int(0, 40) }), text: 'Run it. f is calculated fresh each time.', code: ['class Thermo:', '    def __init__(self, c):', '        self.c = c', '    @property', '    def f(self):', '        return self.c * 9 / 5 + 32', 't = Thermo($c)', 'print(t.f)', 't.c = 100', 'print(t.f)'] },
@@ -71,7 +71,7 @@ const WORLD12 = {
       learn: [{ title: '@property', code: '@property\ndef area(self):\n    return self.w * self.h', text: 'A method read like an attribute, without brackets. Always up to date.' }],
     },
     {
-      id: '12-3', title: 'Guarded values', bg: 'citadel', npc: 'warden2', mentor: 'warden2', tags: ['setter'],
+      id: '23-3', title: 'Guarded values', bg: 'citadel', npc: 'warden2', mentor: 'warden2', tags: ['setter'],
       steps: [
         { type: 'talk', who: 'warden2', text: 'A setter guards the gate. Store the real value as self._hp, then @hp.setter runs every time someone writes obj.hp = ..., so you can refuse bad values.' },
         { type: 'demo', vars: R => ({ h: R.int(20, 50) }), text: 'Run it. The setter refuses a negative hp.', code: ['class Golem:', '    def __init__(self, hp):', '        self.hp = hp', '    @property', '    def hp(self):', '        return self._hp', '    @hp.setter', '    def hp(self, value):', '        if value < 0:', '            raise ValueError("hp cannot be negative")', '        self._hp = value', 'g = Golem($h)', 'print(g.hp)', 'try:', '    g.hp = -5', 'except ValueError as e:', '    print("refused:", e)'] },
@@ -103,7 +103,7 @@ const WORLD12 = {
       learn: [{ title: 'Setters', code: '@hp.setter\ndef hp(self, value):\n    self._hp = value', text: 'Runs on every obj.hp = value. Check the value, then store it in a hidden _hp.' }],
     },
     {
-      id: '12-4', title: 'Guard bots', bg: 'gearworks', mentor: 'narrator', tags: [],
+      id: '23-4', title: 'Guard bots', bg: 'gearworks', mentor: 'narrator', tags: [],
       foe: R => ({ kind: 'gearbot', hp: 64, weak: 'spark' }),
       steps: [
         { type: 'talk', who: 'narrator', text: 'Guard bots patrol the gearworks! Your staff has a charge dial. A property turns the charge into spell power.' },
@@ -130,7 +130,7 @@ const WORLD12 = {
       learn: [{ title: 'Properties in battle', code: 's.charge = 5\ncast(spark, s.power)', text: 'Properties look like plain attributes, but run code behind the scenes.' }],
     },
     {
-      id: '12-5', title: 'Other ways to build', bg: 'citadel', npc: 'artificer', mentor: 'artificer', tags: ['clsmethod'],
+      id: '23-5', title: 'Other ways to build', bg: 'citadel', npc: 'artificer', mentor: 'artificer', tags: ['clsmethod'],
       steps: [
         { type: 'talk', who: 'artificer', text: '@classmethod makes a method that gets the class itself as cls, not an object. It is perfect for other ways to build objects, like from a text record.' },
         { type: 'demo', vars: R => ({ n: R.pick(PARTS), w: R.int(1, 20) }), text: 'Run it.', code: ['class Part:', '    def __init__(self, name, weight):', '        self.name = name', '        self.weight = weight', '    @classmethod', '    def from_text(cls, text):', '        name, weight = text.split(":")', '        return cls(name, int(weight))', 'p = Part.from_text("$n:$w")', 'print(p.name, p.weight + 1)'] },
@@ -161,7 +161,7 @@ const WORLD12 = {
       learn: [{ title: '@classmethod', code: '@classmethod\ndef from_text(cls, text):\n    return cls(...)', text: 'Gets the class as cls. Great for extra ways to build objects.' }],
     },
     {
-      id: '12-6', title: 'Tools on the wall', bg: 'citadel', npc: 'warden2', mentor: 'warden2', tags: ['staticm'],
+      id: '23-6', title: 'Tools on the wall', bg: 'citadel', npc: 'warden2', mentor: 'warden2', tags: ['staticm'],
       steps: [
         { type: 'talk', who: 'warden2', text: '@staticmethod is a plain function that lives in the class because it belongs there. It gets no self and no cls.' },
         {
@@ -191,7 +191,7 @@ const WORLD12 = {
       learn: [{ title: '@staticmethod', code: '@staticmethod\ndef valid(v):\n    return v > 0', text: 'A plain function kept inside the class. No self, no cls.' }],
     },
     {
-      id: '12-7', title: 'Built from parts', bg: 'citadel', npc: 'artificer', mentor: 'artificer', tags: ['compose'],
+      id: '23-7', title: 'Built from parts', bg: 'citadel', npc: 'artificer', mentor: 'artificer', tags: ['compose'],
       steps: [
         { type: 'talk', who: 'artificer', text: 'Big machines are built from smaller ones. An object can hold other objects in its attributes. That is called composition: a Clock HAS gears, it is not a gear.' },
         { type: 'demo', vars: R => ({ ps: R.sample(PARTS, 3) }), text: 'Run it.', code: ['class Part:', '    def __init__(self, name):', '        self.name = name', 'class Machine:', '    def __init__(self):', '        self.parts = list()', '    def add(self, part):', '        self.parts.append(part)', 'm = Machine()', 'for n in $(JSON.stringify(ps)):', '    m.add(Part(n))', 'print([p.name for p in m.parts])'] },
@@ -222,7 +222,7 @@ const WORLD12 = {
       learn: [{ title: 'Composition', code: 'self.shield = Shield(3)\nself.parts = [Part(...), ...]', text: 'Objects holding other objects. Prefer "has a" over "is a" when building big things.' }],
     },
     {
-      id: '12-8', title: 'The broken engine', bg: 'gearworks', mentor: 'narrator', tags: ['ooperr'],
+      id: '23-8', title: 'The broken engine', bg: 'gearworks', mentor: 'narrator', tags: ['ooperr'],
       foe: R => ({ kind: 'gearbot', hp: 80, tint: 'big' }),
       steps: [
         { type: 'talk', who: 'narrator', text: 'The citadel engine is jammed and a giant gearbot guards it. Every jam is a real Python mistake.' },
@@ -257,7 +257,7 @@ const WORLD12 = {
       learn: [{ title: 'Object bugs', code: 'self.parts   Gear.count   super().__init__\nproperties: no ()', text: 'Most object bugs are a missing self, a missing super(), or a property called like a method.' }],
     },
     {
-      id: '12-9', title: 'The Clockwork King', bg: 'clocktower', foe: { kind: 'clockking', hp: 220, weak: 'icebolt', resist: 'fireball' }, mentor: 'narrator', boss: true, tags: [],
+      id: '23-9', title: 'The Clockwork King', bg: 'clocktower', foe: { kind: 'clockking', hp: 220, weak: 'icebolt', resist: 'fireball' }, mentor: 'narrator', boss: true, tags: [],
       steps: [
         { type: 'talk', who: 'clockking', text: 'TICK. TOCK. EVERY GEAR IN THIS CITADEL OBEYS MY CLASS.' },
         { type: 'talk', who: 'narrator', text: 'The Clockwork King has 220 HP. Icebolt freezes his gears for double. Fireball only oils them.' },
@@ -291,7 +291,7 @@ const WORLD12 = {
       learn: [{ title: 'Citadel toolkit', code: 'count = 0  @property  @x.setter\n@classmethod  @staticmethod', text: 'Shared values, guarded attributes, and other ways to build. Your classes are complete.' }],
     },
     {
-      id: '12-R', title: 'The Grand Automaton', bg: 'automaton', foe: { kind: 'automaton', hp: 200 }, mentor: 'narrator', boss: true, review: true, tags: [],
+      id: '23-R', title: 'The Grand Automaton', bg: 'automaton', foe: { kind: 'automaton', hp: 200 }, mentor: 'narrator', boss: true, review: true, tags: [],
       steps: [
         { type: 'talk', who: 'automaton', text: 'I AM THE GRAND AUTOMATON. I WAS BUILT FROM EVERY LESSON OF THE FORGE, THE KEEP AND THE CITADEL. PROVE YOU UNDERSTAND MY PARTS.' },
         { type: 'talk', who: 'narrator', text: 'Review boss! Worlds 10 to 12, plus a few old favorites. Every right answer strikes it. 200 HP.' },
@@ -324,4 +324,4 @@ const WORLD12 = {
     },
   ],
 };
-WORLDS.push(WORLD12);
+WORLDS.push(WORLD23);

@@ -1,16 +1,16 @@
-/* World 10: The Golem Forge. Classes and objects: class, attributes, __init__ and self,
+/* World 21: The Golem Forge. Classes and objects: class, attributes, __init__ and self,
    methods, changing state, __str__, lists of objects, and the classic OOP mistakes. */
 const GOLEMS = ['Bolt', 'Rivet', 'Cog', 'Anvil', 'Flint', 'Brass', 'Gizmo', 'Ember'];
 const golem2 = R => R.sample(GOLEMS, 2);
 
-const WORLD10 = {
-  id: 10, name: 'The Golem Forge', topic: 'classes and objects', map: 'bg-map10.jpg',
+const WORLD21 = {
+  id: 21, name: 'The Golem Forge', topic: 'classes and objects', map: 'bg-map10.jpg',
   nodes: [[50, 92], [28, 82], [70, 73], [34, 63], [68, 53], [30, 43], [66, 33], [38, 22], [50, 9]],
   levels: [
     {
-      id: '10-1', title: 'Blueprints', bg: 'forge', npc: 'forgemaster', mentor: 'forgemaster', tags: ['class'],
+      id: '21-1', title: 'Blueprints', bg: 'forge', npc: 'forgemaster', mentor: 'forgemaster', tags: ['class'],
       steps: [
-        { type: 'talk', who: 'forgemaster', text: "Beyond the Source lies the Golem Forge, {NAME}. I'm Forgemaster Brann. Here we build golems from blueprints. In Python a blueprint is a class, and each thing built from it is an object." },
+        { type: 'talk', who: 'forgemaster', text: "Welcome to the Golem Forge, {NAME}. I'm Forgemaster Brann. Here we build golems from blueprints. In Python a blueprint is a class, and each thing built from it is an object." },
         { type: 'talk', who: 'forgemaster', text: 'class Golem: writes the blueprint. Golem() builds one golem. The dot puts a jar on that object: g.name = "Bolt" gives it a name. Jars on an object are called attributes.' },
         { type: 'demo', vars: R => ({ n: R.pick(GOLEMS), p: R.int(5, 30) }), text: 'Run it. One blueprint, one golem.', code: ['class Golem:', '    pass', 'g = Golem()', 'g.name = "$n"', 'g.power = $p', 'print(g.name, "has power", g.power)'] },
         {
@@ -43,7 +43,7 @@ const WORLD10 = {
       ],
     },
     {
-      id: '10-2', title: 'The __init__ rune', bg: 'forge', npc: 'tinker', mentor: 'tinker', tags: ['init'],
+      id: '21-2', title: 'The __init__ rune', bg: 'forge', npc: 'tinker', mentor: 'tinker', tags: ['init'],
       steps: [
         { type: 'talk', who: 'tinker', text: "I'm Tinker Lio! Setting every attribute by hand gets old. Carve an __init__ rune into the blueprint and it runs by itself every time a golem is built." },
         { type: 'talk', who: 'tinker', text: 'Inside the class, self means "the golem being built". self.name = name copies the value into that golem. Golem("Bolt", 12) fills name and power.' },
@@ -86,7 +86,7 @@ const WORLD10 = {
       learn: [{ title: '__init__ and self', code: 'def __init__(self, name):\n    self.name = name', text: 'Runs when an object is built. self is the new object; self.x = ... stores an attribute on it.' }],
     },
     {
-      id: '10-3', title: 'Teaching tricks', bg: 'forge', npc: 'forgemaster', mentor: 'forgemaster', tags: ['method'],
+      id: '21-3', title: 'Teaching tricks', bg: 'forge', npc: 'forgemaster', mentor: 'forgemaster', tags: ['method'],
       steps: [
         { type: 'talk', who: 'forgemaster', text: 'A golem that only stands there is a statue. Teach it tricks: functions written inside the class. They are called methods, and their first parameter is always self.' },
         { type: 'demo', vars: R => ({ n: R.pick(GOLEMS) }), text: 'Run it. g.greet() calls the method on that golem.', code: ['class Golem:', '    def __init__(self, name):', '        self.name = name', '    def greet(self):', '        return f"I am {self.name}"', 'g = Golem("$n")', 'print(g.greet())'] },
@@ -123,7 +123,7 @@ const WORLD10 = {
       learn: [{ title: 'Methods', code: 'def greet(self):\n    return self.name\ng.greet()', text: 'Functions inside a class. Call them on an object; Python passes the object in as self.' }],
     },
     {
-      id: '10-4', title: 'Rogue sparkbots', bg: 'foundry', mentor: 'narrator', tags: [],
+      id: '21-4', title: 'Rogue sparkbots', bg: 'foundry', mentor: 'narrator', tags: [],
       foe: R => { const p = R.int(14, 26); return { kind: 'sparkbot', hp: p, p }; },
       steps: [
         { type: 'talk', who: 'narrator', text: 'Sparkbots broke loose in the foundry! Your golems can cast spells from inside their methods.' },
@@ -152,7 +152,7 @@ const WORLD10 = {
       learn: [{ title: 'Objects that act', code: 'def attack(self):\n    cast(fireball, self.power)', text: 'A method can use the object\'s attributes to do things.' }],
     },
     {
-      id: '10-5', title: 'Changing state', bg: 'forge', npc: 'tinker', mentor: 'tinker', tags: ['state'],
+      id: '21-5', title: 'Changing state', bg: 'forge', npc: 'tinker', mentor: 'tinker', tags: ['state'],
       steps: [
         { type: 'talk', who: 'tinker', text: 'Objects remember. A method can change self.something, and the change stays on that object for later. That memory is called state.' },
         { type: 'demo', vars: R => ({ c: R.int(50, 100), u: R.int(5, 20) }), text: 'Run it. The battery drains and remembers.', code: ['class Battery:', '    def __init__(self, charge):', '        self.charge = charge', '    def use(self, n):', '        self.charge -= n', 'b = Battery($c)', 'b.use($u)', 'b.use($u)', 'print(b.charge)'] },
@@ -189,7 +189,7 @@ const WORLD10 = {
       learn: [{ title: 'State', code: 'def use(self, n):\n    self.charge -= n', text: 'Methods can change an object\'s attributes. The object remembers until the next change.' }],
     },
     {
-      id: '10-6', title: 'Speaking objects', bg: 'forge', npc: 'forgemaster', mentor: 'forgemaster', tags: ['strdunder'],
+      id: '21-6', title: 'Speaking objects', bg: 'forge', npc: 'forgemaster', mentor: 'forgemaster', tags: ['strdunder'],
       steps: [
         { type: 'talk', who: 'forgemaster', text: 'Print a golem and you get a strange label with a memory address. Carve a __str__ rune and the golem chooses what print shows. It must return a string.' },
         {
@@ -221,7 +221,7 @@ const WORLD10 = {
       learn: [{ title: '__str__', code: 'def __str__(self):\n    return f"{self.name}"', text: 'Decides what print(obj), str(obj) and f"{obj}" show. Must return a string.' }],
     },
     {
-      id: '10-7', title: 'Golem armies', bg: 'forge', npc: 'tinker', mentor: 'tinker', tags: ['objlist'],
+      id: '21-7', title: 'Golem armies', bg: 'forge', npc: 'tinker', mentor: 'tinker', tags: ['objlist'],
       steps: [
         { type: 'talk', who: 'tinker', text: 'One golem is nice. An army is better! Objects go in lists like any other value, and a for loop visits each one.' },
         { type: 'demo', vars: R => ({ ns: R.sample(GOLEMS, 3) }), text: 'Run it.', code: ['class Golem:', '    def __init__(self, name):', '        self.name = name', 'army = [Golem("$(ns[0])"), Golem("$(ns[1])"), Golem("$(ns[2])")]', 'for g in army:', '    print(g.name, "reporting")'] },
@@ -257,7 +257,7 @@ const WORLD10 = {
       learn: [{ title: 'Lists of objects', code: 'for g in army:\n    total += g.power', text: 'Store objects in lists and loop over them like any other values.' }],
     },
     {
-      id: '10-8', title: 'Broken blueprints', bg: 'foundry', mentor: 'narrator', tags: ['ooperr'],
+      id: '21-8', title: 'Broken blueprints', bg: 'foundry', mentor: 'narrator', tags: ['ooperr'],
       foe: R => ({ kind: 'construct', hp: 60 }),
       steps: [
         { type: 'talk', who: 'narrator', text: 'A construct built from broken blueprints stomps toward you! Spot each classic mistake before it spots you.' },
@@ -291,7 +291,7 @@ const WORLD10 = {
       learn: [{ title: 'Classic OOP mistakes', code: 'self.power  not  power\ndef m(self):\nGolem(...)  then  g.m()', text: 'Use self. inside methods, give every method self, and call methods on objects, not the class.' }],
     },
     {
-      id: '10-9', title: 'The Iron Colossus', bg: 'forgeheart', foe: { kind: 'colossus', hp: 200, weak: 'spark', resist: 'icebolt' }, mentor: 'narrator', boss: true, tags: [],
+      id: '21-9', title: 'The Iron Colossus', bg: 'forgeheart', foe: { kind: 'colossus', hp: 200, weak: 'spark', resist: 'icebolt' }, mentor: 'narrator', boss: true, tags: [],
       steps: [
         { type: 'talk', who: 'colossus', text: 'I AM THE FIRST GOLEM. NO BLUEPRINT CAN MATCH ME.' },
         { type: 'talk', who: 'narrator', text: 'The Iron Colossus has 200 HP. Spark shorts its circuits for double damage. Icebolt barely chills it.' },
@@ -327,4 +327,4 @@ const WORLD10 = {
     },
   ],
 };
-WORLDS.push(WORLD10);
+WORLDS.push(WORLD21);

@@ -435,12 +435,12 @@ const WORLD1 = {
   ],
 };
 
-const WORLD2 = {
-  id: 2, name: 'Whispering Library', topic: 'strings in depth', map: 'bg-map2.jpg',
+const WORLD3 = {
+  id: 3, name: 'Whispering Library', topic: 'strings in depth', map: 'bg-map2.jpg',
   nodes: [[50, 93], [28, 84], [72, 75], [28, 65], [72, 56], [28, 46], [72, 36], [32, 24], [50, 9]],
   levels: [
     {
-      id: '2-1', title: 'Counting letters', bg: 'library', npc: 'librarian', mentor: 'librarian', tags: ['len'],
+      id: '3-1', title: 'Counting letters', bg: 'library', npc: 'librarian', mentor: 'librarian', tags: ['len'],
       steps: [
         { type: 'talk', who: 'librarian', text: "Welcome to the Whispering Library, {NAME}. I'm Archivist Quill. Every book here is made of strings. Let's study them closely." },
         { type: 'talk', who: 'librarian', text: 'len() counts how many characters are in a string. Letters, spaces and symbols all count.' },
@@ -479,7 +479,7 @@ const WORLD2 = {
       learn: [{ title: 'len()', code: 'len("magic")', text: 'Counts the characters in a string. Spaces count too.' }],
     },
     {
-      id: '2-2', title: 'Shouting scrolls', bg: 'library', npc: 'librarian', mentor: 'librarian', tags: ['case'],
+      id: '3-2', title: 'Shouting scrolls', bg: 'library', npc: 'librarian', mentor: 'librarian', tags: ['case'],
       steps: [
         { type: 'talk', who: 'librarian', text: 'Strings come with built-in tools called methods. You use them with a dot after the string, like text.upper()' },
         { type: 'demo', vars: R => ({ w: R.word() }), text: 'Run it.', code: ['spell = "$w"', 'print(spell.upper())'] },
@@ -529,7 +529,7 @@ const WORLD2 = {
       ],
     },
     {
-      id: '2-3', title: 'Letter by letter', bg: 'library', npc: 'scribe', mentor: 'scribe', tags: ['index'],
+      id: '3-3', title: 'Letter by letter', bg: 'library', npc: 'scribe', mentor: 'scribe', tags: ['index'],
       steps: [
         { type: 'talk', who: 'scribe', text: "I'm Wren, the scribe. I copy books one letter at a time. In Python you grab one letter with square brackets." },
         { type: 'talk', who: 'scribe', text: 'Positions start at 0, not 1! word[0] is the first letter, word[1] the second.' },
@@ -571,7 +571,7 @@ const WORLD2 = {
       learn: [{ title: 'Indexing', code: 'word[0]   word[-1]', text: 'Square brackets pick one character. Positions start at 0. Negative positions count from the end.' }],
     },
     {
-      id: '2-4', title: 'Ink in the stacks', bg: 'stacks', foe: R => { const w = R.pick(['fireball', 'lightning', 'starfall']); return { kind: 'inkling', hp: w.length * 2 + R.int(0, w.length - 1), w }; }, mentor: 'narrator', tags: [],
+      id: '3-4', title: 'Ink in the stacks', bg: 'stacks', foe: R => { const w = R.pick(['fireball', 'lightning', 'starfall']); return { kind: 'inkling', hp: w.length * 2 + R.int(0, w.length - 1), w }; }, mentor: 'narrator', tags: [],
       steps: [
         { type: 'talk', who: 'narrator', text: 'Spilled ink comes alive! An inkling blocks the aisle. It has $HP HP.' },
         { type: 'talk', who: 'narrator', text: 'In the library, spell power comes from words. Longer words make stronger spells.' },
@@ -599,7 +599,7 @@ const WORLD2 = {
       learn: [{ title: 'Functions inside functions', code: 'cast(fireball, len(word))', text: 'Python works from the inside out. len(word) runs first, then its result goes into cast().' }],
     },
     {
-      id: '2-5', title: 'Torn pages', bg: 'library', npc: 'scribe', mentor: 'scribe', tags: ['slice'],
+      id: '3-5', title: 'Torn pages', bg: 'library', npc: 'scribe', mentor: 'scribe', tags: ['slice'],
       steps: [
         { type: 'talk', who: 'scribe', text: 'Some pages are torn. A slice copies part of a string: word[start:stop]' },
         { type: 'talk', who: 'scribe', text: 'The slice starts at start and stops just before stop. So word[0:3] gives positions 0, 1 and 2.' },
@@ -641,7 +641,7 @@ const WORLD2 = {
       learn: [{ title: 'Slicing', code: 'word[0:4]   word[4:]   word[::-1]', text: 'Copies part of a string. Start is included, stop is not. Leave either out to go to the edge. A step of -1 reverses.' }],
     },
     {
-      id: '2-6', title: 'Fill-in letters', bg: 'library', npc: 'librarian', mentor: 'librarian', tags: ['fstr'],
+      id: '3-6', title: 'Fill-in letters', bg: 'library', npc: 'librarian', mentor: 'librarian', tags: ['fstr'],
       steps: [
         { type: 'talk', who: 'librarian', text: 'Gluing strings with + gets messy. An f-string lets you drop jars straight into text.' },
         { type: 'talk', who: 'librarian', text: 'Put f before the quotes, then put a jar name in curly braces, like f"Hi {name}"' },
@@ -679,7 +679,7 @@ const WORLD2 = {
       learn: [{ title: 'f-strings', code: 'f"{name} has {gold} gold"', text: 'Put f before the quotes and jars in curly braces. Numbers are turned into text for you.' }],
     },
     {
-      id: '2-7', title: "The scribe's tools", bg: 'library', npc: 'scribe', mentor: 'scribe', tags: ['methods'],
+      id: '3-7', title: "The scribe's tools", bg: 'library', npc: 'scribe', mentor: 'scribe', tags: ['methods'],
       steps: [
         { type: 'talk', who: 'scribe', text: 'A few more tools from my desk. replace() swaps text, count() counts it, and strip() trims spaces off the ends.' },
         { type: 'demo', vars: R => { const [a, b] = R.sample(['cat', 'owl', 'fox', 'bat'], 2); return { a, b }; }, text: 'Run it.', code: ['line = "the $a sat"', 'print(line.replace("$a", "$b"))'] },
@@ -721,7 +721,7 @@ const WORLD2 = {
       ],
     },
     {
-      id: '2-8', title: 'Paper bats', bg: 'stacks', foe: R => { const w = R.pick(['spark', 'flash', 'zap']), k = R.int(5, 7); return { kind: 'paperbat', hp: w.length * k, w, k }; }, mentor: 'narrator', tags: [],
+      id: '3-8', title: 'Paper bats', bg: 'stacks', foe: R => { const w = R.pick(['spark', 'flash', 'zap']), k = R.int(5, 7); return { kind: 'paperbat', hp: w.length * k, w, k }; }, mentor: 'narrator', tags: [],
       steps: [
         { type: 'talk', who: 'narrator', text: 'Loose pages fold themselves into bats! A paper bat swoops in with $HP HP.' },
         { type: 'talk', who: 'narrator', text: 'Paper bats only flinch when you shout the spell name first. Shout it in capitals, then cast.' },
@@ -747,7 +747,7 @@ const WORLD2 = {
       learn: [{ title: 'Methods inside f-strings', code: 'f"{spell.upper()}!"', text: 'Anything that gives a value can go inside the braces, even a method call.' }],
     },
     {
-      id: '2-9', title: 'The Grimoire', bg: 'reading', foe: { kind: 'grimoire', hp: 90 }, mentor: 'narrator', boss: true, tags: [],
+      id: '3-9', title: 'The Grimoire', bg: 'reading', foe: { kind: 'grimoire', hp: 90 }, mentor: 'narrator', boss: true, tags: [],
       steps: [
         { type: 'talk', who: 'grimoire', text: 'SSSHHH! NO SPELLS IN MY LIBRARY... unless you can read mine.' },
         { type: 'talk', who: 'narrator', text: 'The Grimoire has 90 HP and attacks with riddles. Read every line carefully!' },
@@ -783,9 +783,9 @@ const WORLD2 = {
         },
         { type: 'talk', who: 'grimoire', text: '...the end. You may borrow any book you like, young mage.' },
       ],
-      learn: [{ title: 'String toolkit', code: 'len(s)  s[0]  s[1:4]  s.upper()  f"{s}"', text: 'Everything from World 2 in one line. Strings can be measured, picked apart, changed and filled in.' }],
+      learn: [{ title: 'String toolkit', code: 'len(s)  s[0]  s[1:4]  s.upper()  f"{s}"', text: 'Everything from World 3 in one line. Strings can be measured, picked apart, changed and filled in.' }],
     },
   ],
 };
 
-const WORLDS = [WORLD1, WORLD2];
+const WORLDS = [WORLD1, WORLD3];
