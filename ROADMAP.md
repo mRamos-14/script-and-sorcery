@@ -57,12 +57,12 @@ with fresh values every play.
 | 32 | The Proving Grounds | testing (+ R) | CS50P, MIT | ✅ |
 
 ## Act VII · Data and the web
-| 33 | The Ledger Hall | CSV and JSON in depth: DictReader/Writer, json.load/dump, nested JSON | Py4E 13, ATBS 16 | 🔨 |
-| 34 | The Root Library | XML with ElementTree: find, findall, attributes | Py4E 13 | 🔨 |
-| 35 | The Vault of Records | sqlite3: CREATE, INSERT, SELECT, WHERE, ORDER BY, UPDATE, DELETE, ? parameters | Py4E 15 | 🔨 |
-| 36 | The Web of Tables | keys, many tables, JOIN, many-to-many | Py4E 15 | 🔨 |
-| 37 | The Sky Post | HTTP, urllib, APIs, JSON from the web | Py4E 12-13, CS50P 4 | 🔨 |
-| 38 | The Spider's Lair | web scraping: HTML, BeautifulSoup, links (+ R) | Py4E 12, ATBS 12 | 🔨 |
+| 33 | The Ledger Hall | CSV and JSON in depth: DictReader/Writer, json.load/dump, nested JSON | Py4E 13, ATBS 16 | ✅ |
+| 34 | The Root Library | XML with ElementTree: find, findall, attributes | Py4E 13 | ✅ |
+| 35 | The Vault of Records | sqlite3: CREATE, INSERT, SELECT, WHERE, ORDER BY, UPDATE, DELETE, ? parameters | Py4E 15 | ✅ |
+| 36 | The Web of Tables | keys, many tables, JOIN, many-to-many | Py4E 15 | ✅ |
+| 37 | The Sky Post | HTTP, urllib, APIs, JSON from the web | Py4E 12-13, CS50P 4 | ✅ |
+| 38 | The Spider's Lair | web scraping: HTML, BeautifulSoup, links (+ R) | Py4E 12, ATBS 12 | ✅ |
 
 ## Act VIII · Advanced Python
 | 39 | The Skyward Gardens | lambda, map, filter, sorting keys | CS50P | ✅ |
