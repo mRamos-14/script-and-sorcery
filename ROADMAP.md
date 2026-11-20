@@ -24,7 +24,7 @@ with fresh values every play.
 | 7 | Merchant Town | lists | CS50P, Py4E 8 | ✅ |
 | 8 | The Twin Isles | tuples, packing/unpacking, swapping, comparing tuples, sorting by value with tuples, enumerate, zip, returning many values | Py4E 10 | ✅ |
 | 9 | Trading Port | dictionaries (+ R) | CS50P, Py4E 9 | ✅ |
-| 10 | The Prism Gardens | sets: add/remove/discard, membership speed, union, intersection, difference, symmetric difference, subset, frozenset, set comprehensions | Py4E, ours | 🔨 |
+| 10 | The Prism Gardens | sets: add/remove/discard, membership speed, union, intersection, difference, symmetric difference, subset, frozenset, set comprehensions | Py4E, ours | ✅ |
 
 ## Act III · Functions, errors and files
 | 11 | Mage Tower | functions | CS50P, MIT | ✅ |
