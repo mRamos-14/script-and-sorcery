@@ -97,8 +97,13 @@ def main():
     if os.path.exists(OUT):
         shutil.rmtree(OUT)
     os.makedirs(os.path.join(OUT, 'assets'))
+    ver = version()
+    stamp = '<meta name="sorcery-version" content="%s">' % ver
     with open(os.path.join(ROOT, 'index.html'), encoding='utf-8') as f:
-        page = HEAD.replace('</head>', APP_HEAD + '</head>') + f.read() + '</body></html>'
+        page = HEAD.replace('</head>', APP_HEAD + stamp + '</head>') + f.read() + '</body></html>'
+    # the Update button compares this file (always fetched fresh) with the page's own stamp
+    with open(os.path.join(OUT, 'version.json'), 'w', encoding='utf-8') as f:
+        json.dump({'version': ver, 'built': time.strftime('%d %b %Y', time.gmtime())}, f)
     with open(os.path.join(OUT, 'index.html'), 'w', encoding='utf-8') as f:
         f.write(page)
     scripts = sorted(n for n in os.listdir(ROOT) if n.endswith('.js'))
@@ -114,9 +119,9 @@ def main():
         json.dump(MANIFEST, f, indent=2)
     core = ['./', 'index.html', 'manifest.webmanifest'] + scripts
     with open(os.path.join(OUT, 'sw.js'), 'w', encoding='utf-8') as f:
-        f.write(SW % {'version': json.dumps(version()), 'core': json.dumps(core), 'art': json.dumps(art)})
+        f.write(SW % {'version': json.dumps(ver), 'core': json.dumps(core), 'art': json.dumps(art)})
     open(os.path.join(OUT, '.nojekyll'), 'w').close()
-    print('built', OUT, 'version', version())
+    print('built', OUT, 'version', ver)
 
 
 if __name__ == '__main__':

@@ -396,7 +396,8 @@
     $('#set-music-vol').closest('.set-slider').classList.toggle('off', st.mute || !st.music);
     $('#set-sfx-vol').closest('.set-slider').classList.toggle('off', st.mute || !st.sfx);
     $('#save-box').hidden = true;
-    $('#set-version').textContent = `Script & Sorcery · ${WORLDS.length} worlds · ${WORLDS.reduce((n, w) => n + w.levels.length, 0)} levels`;
+    const ver = (document.querySelector('meta[name="sorcery-version"]') || {}).content;
+    $('#set-version').textContent = `Script & Sorcery · ${WORLDS.length} worlds · ${WORLDS.reduce((n, w) => n + w.levels.length, 0)} levels${ver ? ' · version ' + ver : ''}`;
   }
   const changeSetting = (k, v) => { save.settings[k] = v; persist(); Sound.configure(save.settings); renderSettings(); };
   $('#set-mute').onclick = () => { changeSetting('mute', !save.settings.mute); sfx('tap'); };
@@ -2208,6 +2209,53 @@
         else say('In Chrome: tap ⋮ at the top right, then "Add to Home screen" and choose Install. If you only see "Create shortcut", wait a few seconds for the page to finish loading and try again.');
       };
     }
+  }
+
+  /* ---------------- Update button (only on the hosted build) ----------------
+     Every build stamps version.json and a <meta name="sorcery-version">. The app compares
+     them when it opens and when you come back to it; if a newer one is live, the button turns
+     into "Update now". Updating drops the cached code and reloads; the save (localStorage)
+     and the art cache are untouched. */
+  if (hosted) {
+    const ub = $('#btn-update'), uh = $('#update-hint');
+    const mine = (document.querySelector('meta[name="sorcery-version"]') || {}).content || '';
+    let latest = null;
+    const note = text => { uh.textContent = text; uh.hidden = !text; };
+    const fetchLatest = async () => {
+      const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) throw new Error('no version file');
+      return r.json();
+    };
+    const markReady = info => {
+      latest = info;
+      ub.textContent = 'Update now';
+      ub.classList.remove('ghost');
+      note(`A new version is ready (${info.version}${info.built ? ', ' + info.built : ''}). Your progress is kept.`);
+    };
+    const check = async loud => {
+      try {
+        const info = await fetchLatest();
+        if (mine && info.version !== mine) { markReady(info); return; }
+        if (loud) note(`You have the latest version (${mine || info.version}).`);
+      } catch (e) {
+        if (loud) note(navigator.onLine === false ? 'You are offline. Connect to the internet and try again.' : 'Could not check for updates right now. Try again in a moment.');
+      }
+    };
+    const update = async () => {
+      ub.disabled = true;
+      note('Updating...');
+      try { persist(); } catch (e) { /* the save is written as you play anyway */ }
+      try {
+        const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null;
+        if (reg) await reg.update().catch(() => {});
+        if (window.caches) for (const k of await caches.keys()) if (k.startsWith('sorcery-code-')) await caches.delete(k);
+      } catch (e) { /* reloading still fetches the new files */ }
+      location.reload();
+    };
+    ub.hidden = false;
+    ub.onclick = () => { sfx('tap'); if (latest) update(); else { note('Checking...'); check(true); } };
+    window.addEventListener('load', () => check(false));
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && !latest) check(false); });
   }
 
   /* ---------------- never freeze ---------------- */
