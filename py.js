@@ -4519,6 +4519,8 @@ const Py = (() => {
       if (t.k === 'named') { p++; return { n: 'named', name: t.v }; }
       if (isKw('NULL')) { p++; return { n: 'lit', v: V.none }; }
       if (isKw('TRUE') || isKw('FALSE')) { p++; return { n: 'lit', v: V.int(t.v === 'TRUE' ? 1 : 0) }; }
+      if (isOp('(') && isKw('SELECT', 1)) { p++; const q = select(); op(')'); return { n: 'subq', q }; }
+      if (isKw('EXISTS') && isOp('(', 1)) { p += 2; const q = select(); op(')'); return { n: 'exists', q }; }
       if (isOp('(')) { p++; const e = expr(); op(')'); return e; }
       if (isKw('CASE')) {
         p++;
@@ -4868,6 +4870,8 @@ const Py = (() => {
           return e.other ? evalSql(e.other, row, args) : V.none;
         }
         case 'fn': return sqlFunc(e, row, args);
+        case 'subq': { const r = runSelect(e.q, args, row).rows; return r.length ? r[0][0] : V.none; }
+        case 'exists': return V.int(runSelect(e.q, args, row).rows.length ? 1 : 0);
         case 'star': throw sqlSyntax('near "*": syntax error');
       }
       throw sqlSyntax('unsupported expression');
@@ -4950,7 +4954,7 @@ const Py = (() => {
       const walk = (e, allowAlias) => {
         if (!e || typeof e !== 'object') return;
         if (e.n === 'col') { if (!known(e.table, e.name) && !(allowAlias && !e.table && aliases.has(e.name.toLowerCase())) && !outer) throw sqlErr('OperationalError', `no such column: ${e.table ? e.table + '.' : ''}${e.name}`); return; }
-        if (e.n === 'insel') { walk(e.l, allowAlias); return; }
+        if (e.n === 'insel' || e.n === 'subq' || e.n === 'exists') { if (e.l) walk(e.l, allowAlias); return; }
         for (const v of Object.values(e)) { if (Array.isArray(v)) v.forEach(x => (Array.isArray(x) ? x.forEach(y => walk(y, allowAlias)) : walk(x, allowAlias))); else if (v && typeof v === 'object' && v.n) walk(v, allowAlias); }
       };
       for (const c of q.cols) if (c.e.n !== 'star') walk(c.e, false);
