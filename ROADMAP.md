@@ -79,7 +79,7 @@ with fresh values every play.
 
 ## Act IX · Mastery
 | 50 | The Gauntlet | capstone projects: arithmetic formatter, budget app, text adventure, grade book | Py4E, fCC, ours | ✅ |
-| 51 | The Heart of Code | the final trial: everything | all | 🔨 |
+| 51 | The Heart of Code | the final trial: everything | all | ✅ |
 
 ## Build order
 Path order, so the front of the journey fills first: 2, 4, 8, 10, 12, 15, 16-20, 24-25, 27-28, 30-31, 33-38, 42-51.
