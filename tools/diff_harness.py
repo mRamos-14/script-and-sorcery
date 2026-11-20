@@ -68,8 +68,11 @@ def run_one(p):
                 continue
             fp = os.path.join(root, name)
             rel = os.path.relpath(fp, tmp).replace(os.sep, '/')
-            with open(fp, newline='') as f:
-                files[rel] = f.read()
+            try:
+                with open(fp, newline='', encoding='utf-8') as f:
+                    files[rel] = f.read()
+            except (UnicodeDecodeError, ValueError):
+                pass  # binary files such as SQLite databases
     shutil.rmtree(tmp, ignore_errors=True)
     text = out.getvalue()
     # the game uses "/" in paths like Linux and macOS; Windows Python prints "\\"

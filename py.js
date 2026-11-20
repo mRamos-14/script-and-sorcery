@@ -4460,7 +4460,760 @@ const Py = (() => {
       ElementTree: nat('ElementTree', ([e], kw) => treeOf(e || kw.element)),
     });
   }
-  const MODULES = { copy: makeCopy, 'xml.etree.ElementTree': makeEtree, datetime: makeDatetime, logging: makeLogging, pathlib: makePathlib, os: makeOs, 'os.path': ctx => makeOs(ctx).members.get('path'), shutil: makeShutil, argparse: makeArgparse, random: makeRandom, math: makeMath, statistics: makeStatistics, json: makeJson, csv: makeCsv, sys: makeSys, re: makeRe, pytest: makePytest, requests: makeRequests, string: STRING_MOD };
+  /* ---------- sqlite3: a small SQL engine ----------
+     Supports CREATE/DROP TABLE, INSERT [OR IGNORE|REPLACE], SELECT with joins, WHERE,
+     GROUP BY/HAVING, aggregates, ORDER BY, LIMIT/OFFSET, UPDATE, DELETE, ? and :name
+     parameters, SQLite type affinity, PRIMARY KEY/UNIQUE/NOT NULL constraints. */
+  const SQL_KW = new Set(['SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'NOT', 'INSERT', 'INTO', 'VALUES', 'CREATE', 'TABLE', 'DROP', 'IF', 'EXISTS', 'UPDATE', 'SET', 'DELETE', 'ORDER', 'BY', 'ASC', 'DESC', 'LIMIT', 'OFFSET', 'GROUP', 'HAVING', 'JOIN', 'INNER', 'LEFT', 'OUTER', 'CROSS', 'ON', 'AS', 'NULL', 'IS', 'LIKE', 'IN', 'BETWEEN', 'DISTINCT', 'PRIMARY', 'KEY', 'UNIQUE', 'AUTOINCREMENT', 'DEFAULT', 'IGNORE', 'REPLACE', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END', 'INDEX', 'BEGIN', 'COMMIT', 'TRANSACTION', 'ROLLBACK', 'ALL', 'REFERENCES', 'FOREIGN', 'CONSTRAINT', 'CHECK', 'TRUE', 'FALSE', 'GLOB', 'COLLATE', 'NOCASE']);
+  function sqlTokens(sql) {
+    const toks = [];
+    let i = 0;
+    while (i < sql.length) {
+      const c = sql[i];
+      if (/\s/.test(c)) { i++; continue; }
+      if (sql.startsWith('--', i)) { const e = sql.indexOf('\n', i); i = e < 0 ? sql.length : e; continue; }
+      if (sql.startsWith('/*', i)) { const e = sql.indexOf('*/', i); i = e < 0 ? sql.length : e + 2; continue; }
+      const start = i;
+      if (c === "'") { let v = ''; i++; for (;;) { if (i >= sql.length) throw sqlSyntax('unrecognized token: "' + sql.slice(start) + '"'); if (sql[i] === "'") { if (sql[i + 1] === "'") { v += "'"; i += 2; continue; } i++; break; } v += sql[i++]; } toks.push({ k: 'str', v, s: start, e: i }); continue; }
+      if (c === '"' || c === '`' || c === '[') { const close = c === '[' ? ']' : c; const e = sql.indexOf(close, i + 1); if (e < 0) throw sqlSyntax('unrecognized token: "' + sql.slice(start) + '"'); toks.push({ k: 'id', v: sql.slice(i + 1, e), s: start, e: e + 1, quoted: true }); i = e + 1; continue; }
+      const num = /^(\d+\.\d*|\.\d+|\d+)([eE][-+]?\d+)?/.exec(sql.slice(i));
+      if (num) { toks.push({ k: 'num', v: num[0], s: start, e: i + num[0].length }); i += num[0].length; continue; }
+      const id = /^[A-Za-z_][\w$]*/.exec(sql.slice(i));
+      if (id) { const up = id[0].toUpperCase(); toks.push(SQL_KW.has(up) ? { k: 'kw', v: up, s: start, e: i + id[0].length } : { k: 'id', v: id[0], s: start, e: i + id[0].length }); i += id[0].length; continue; }
+      if (c === '?') { toks.push({ k: 'param', s: start, e: i + 1 }); i++; continue; }
+      if (c === ':' && /[A-Za-z_]/.test(sql[i + 1] || '')) { const m = /^:([A-Za-z_]\w*)/.exec(sql.slice(i)); toks.push({ k: 'named', v: m[1], s: start, e: i + m[0].length }); i += m[0].length; continue; }
+      const op = ['<=', '>=', '!=', '<>', '==', '||'].find(o => sql.startsWith(o, i)) || (/[=<>+\-*/%(),.;]/.test(c) ? c : null);
+      if (!op) throw sqlSyntax('unrecognized token: "' + c + '"');
+      toks.push({ k: 'op', v: op, s: start, e: i + op.length });
+      i += op.length;
+    }
+    return toks;
+  }
+  let SQL_ERR = null; // the module's exception classes, set by makeSqlite
+  const sqlSyntax = msg => sqlErr('OperationalError', msg);
+  function sqlErr(kind, msg) {
+    if (!SQL_ERR) return new PyError(kind, msg);
+    const inst = makeInstance(SQL_ERR[kind], [V.str(msg)], {}, CUR);
+    const e = new PyError(kind, msg);
+    e.obj = inst;
+    return e;
+  }
+  /* parsing */
+  function sqlParse(sql, toks) {
+    let p = 0;
+    const peek = (o = 0) => toks[p + o];
+    const isKw = (v, o = 0) => peek(o) && peek(o).k === 'kw' && peek(o).v === v;
+    const isOp = (v, o = 0) => peek(o) && peek(o).k === 'op' && peek(o).v === v;
+    const near = () => (peek() ? 'near "' + sql.slice(peek().s, peek().e) + '": syntax error' : 'incomplete input');
+    const want = (k, v) => { const t = peek(); if (!t || t.k !== k || (v && t.v !== v)) throw sqlSyntax(near()); p++; return t; };
+    const kw = v => want('kw', v);
+    const op = v => want('op', v);
+    const ident = () => { const t = peek(); if (t && (t.k === 'id' || (t.k === 'kw' && !['FROM', 'WHERE', 'ON', 'JOIN', 'ORDER', 'GROUP', 'LIMIT', 'SET', 'VALUES', 'SELECT', 'AND', 'OR'].includes(t.v)))) { p++; return t.v; } throw sqlSyntax(near()); };
+    let params = 0;
+    function primary() {
+      const t = peek();
+      if (!t) throw sqlSyntax('incomplete input');
+      if (t.k === 'num') { p++; return { n: 'lit', v: /[.eE]/.test(t.v) ? V.float(parseFloat(t.v)) : V.int(parseInt(t.v, 10)) }; }
+      if (t.k === 'str') { p++; return { n: 'lit', v: V.str(t.v) }; }
+      if (t.k === 'param') { p++; return { n: 'param', i: params++ }; }
+      if (t.k === 'named') { p++; return { n: 'named', name: t.v }; }
+      if (isKw('NULL')) { p++; return { n: 'lit', v: V.none }; }
+      if (isKw('TRUE') || isKw('FALSE')) { p++; return { n: 'lit', v: V.int(t.v === 'TRUE' ? 1 : 0) }; }
+      if (isOp('(')) { p++; const e = expr(); op(')'); return e; }
+      if (isKw('CASE')) {
+        p++;
+        const subject = isKw('WHEN') ? null : expr();
+        const whens = [];
+        while (isKw('WHEN')) { p++; const c = expr(); kw('THEN'); whens.push([c, expr()]); }
+        let other = null;
+        if (isKw('ELSE')) { p++; other = expr(); }
+        kw('END');
+        return { n: 'case', subject, whens, other };
+      }
+      if (t.k === 'id' || (t.k === 'kw' && ['REPLACE', 'LIKE', 'KEY'].includes(t.v) && isOp('(', 1))) {
+        p++;
+        if (isOp('(')) {
+          p++;
+          const fn = t.v.toUpperCase();
+          let star = false, distinct = false;
+          const args = [];
+          if (isOp('*')) { p++; star = true; }
+          else if (!isOp(')')) { if (isKw('DISTINCT')) { p++; distinct = true; } args.push(expr()); while (isOp(',')) { p++; args.push(expr()); } }
+          op(')');
+          return { n: 'fn', fn, args, star, distinct };
+        }
+        if (isOp('.')) {
+          p++;
+          if (isOp('*')) { p++; return { n: 'star', table: t.v }; }
+          return { n: 'col', table: t.v, name: ident() };
+        }
+        return { n: 'col', table: null, name: t.v };
+      }
+      throw sqlSyntax(near());
+    }
+    function unary() {
+      if (isOp('-')) { p++; return { n: 'neg', e: unary() }; }
+      if (isOp('+')) { p++; return unary(); }
+      return primary();
+    }
+    function mul() { let l = unary(); while (isOp('*') || isOp('/') || isOp('%')) { const o = toks[p++].v; l = { n: 'bin', op: o, l, r: unary() }; } return l; }
+    function add() { let l = mul(); while (isOp('+') || isOp('-')) { const o = toks[p++].v; l = { n: 'bin', op: o, l, r: mul() }; } return l; }
+    function concat() { let l = add(); while (isOp('||')) { p++; l = { n: 'bin', op: '||', l, r: add() }; } return l; }
+    function cmp() {
+      let l = concat();
+      for (;;) {
+        if (['<', '>', '<=', '>=', '=', '==', '!=', '<>'].some(o => isOp(o))) { const o = toks[p++].v; l = { n: 'cmp', op: o === '==' ? '=' : o === '<>' ? '!=' : o, l, r: concat() }; continue; }
+        if (isKw('IS')) { p++; let neg = false; if (isKw('NOT')) { p++; neg = true; } l = { n: 'is', l, r: concat(), neg }; continue; }
+        let neg = false;
+        if (isKw('NOT') && (isKw('LIKE', 1) || isKw('IN', 1) || isKw('BETWEEN', 1) || isKw('GLOB', 1))) { p++; neg = true; }
+        if (isKw('LIKE') || isKw('GLOB')) { const g = toks[p++].v === 'GLOB'; l = { n: 'like', l, r: concat(), neg, glob: g }; continue; }
+        if (isKw('IN')) {
+          p++; op('(');
+          if (isKw('SELECT')) { const q = select(); op(')'); l = { n: 'insel', l, q, neg }; continue; }
+          const items = [];
+          if (!isOp(')')) { items.push(expr()); while (isOp(',')) { p++; items.push(expr()); } }
+          op(')');
+          l = { n: 'in', l, items, neg };
+          continue;
+        }
+        if (isKw('BETWEEN')) { p++; const lo = concat(); kw('AND'); const hi = concat(); l = { n: 'between', l, lo, hi, neg }; continue; }
+        if (neg) throw sqlSyntax(near());
+        return l;
+      }
+    }
+    function not() { if (isKw('NOT')) { p++; return { n: 'not', e: not() }; } return cmp(); }
+    function and() { let l = not(); while (isKw('AND')) { p++; l = { n: 'and', l, r: not() }; } return l; }
+    function expr() { let l = and(); while (isKw('OR')) { p++; l = { n: 'or', l, r: and() }; } return l; }
+    function tableRef() {
+      const name = ident();
+      let alias = null;
+      if (isKw('AS')) { p++; alias = ident(); } else if (peek() && peek().k === 'id') alias = ident();
+      return { name, alias: alias || name };
+    }
+    function select() {
+      kw('SELECT');
+      let distinct = false;
+      if (isKw('DISTINCT')) { p++; distinct = true; } else if (isKw('ALL')) p++;
+      const cols = [];
+      for (;;) {
+        const startTok = peek();
+        if (isOp('*')) { p++; cols.push({ e: { n: 'star', table: null } }); }
+        else {
+          const e = expr();
+          const endTok = toks[p - 1];
+          let alias = null;
+          if (isKw('AS')) { p++; alias = ident(); } else if (peek() && peek().k === 'id') alias = ident();
+          cols.push({ e, alias, text: sql.slice(startTok.s, endTok.e) });
+        }
+        if (!isOp(',')) break;
+        p++;
+      }
+      const from = [];
+      if (isKw('FROM')) {
+        p++;
+        from.push({ ...tableRef(), join: 'first' });
+        for (;;) {
+          if (isOp(',')) { p++; from.push({ ...tableRef(), join: 'cross' }); continue; }
+          let kind = null;
+          if (isKw('JOIN')) kind = 'inner';
+          else if (isKw('INNER') && isKw('JOIN', 1)) { p++; kind = 'inner'; }
+          else if (isKw('CROSS') && isKw('JOIN', 1)) { p++; kind = 'cross'; }
+          else if (isKw('LEFT')) { p++; if (isKw('OUTER')) p++; kind = 'left'; }
+          if (!kind) break;
+          kw('JOIN');
+          const ref = tableRef();
+          let on = null;
+          if (isKw('ON')) { p++; on = expr(); }
+          from.push({ ...ref, join: kind, on });
+        }
+      }
+      let where = null, group = null, having = null, order = null, limit = null, offset = null;
+      if (isKw('WHERE')) { p++; where = expr(); }
+      if (isKw('GROUP')) { p++; kw('BY'); group = [expr()]; while (isOp(',')) { p++; group.push(expr()); } if (isKw('HAVING')) { p++; having = expr(); } }
+      if (isKw('ORDER')) {
+        p++; kw('BY'); order = [];
+        for (;;) { const e = expr(); let desc = false; if (isKw('ASC')) p++; else if (isKw('DESC')) { p++; desc = true; } order.push({ e, desc }); if (!isOp(',')) break; p++; }
+      }
+      if (isKw('LIMIT')) { p++; limit = expr(); if (isKw('OFFSET')) { p++; offset = expr(); } else if (isOp(',')) { p++; offset = limit; limit = expr(); } }
+      return { n: 'select', distinct, cols, from, where, group, having, order, limit, offset };
+    }
+    function statement() {
+      const t = peek();
+      if (!t) return null;
+      if (isKw('SELECT')) return select();
+      if (isKw('CREATE')) {
+        p++;
+        if (isKw('UNIQUE')) p++;
+        if (isKw('INDEX')) { while (p < toks.length && !isOp(';')) p++; return { n: 'noop' }; }
+        kw('TABLE');
+        let ifNot = false;
+        if (isKw('IF')) { p++; kw('NOT'); kw('EXISTS'); ifNot = true; }
+        const name = ident();
+        op('(');
+        const cols = [], uniques = [];
+        let pk = null;
+        for (;;) {
+          if (isKw('PRIMARY') || isKw('UNIQUE') || isKw('FOREIGN') || isKw('CONSTRAINT') || isKw('CHECK')) {
+            if (isKw('CONSTRAINT')) { p++; ident(); }
+            const which = toks[p++].v;
+            if (which === 'PRIMARY') kw('KEY');
+            if (which === 'FOREIGN') kw('KEY');
+            if (which === 'CHECK') { op('('); let d = 1; while (d && p < toks.length) { if (isOp('(')) d++; else if (isOp(')')) d--; p++; } }
+            else {
+              op('(');
+              const names = [ident()];
+              while (isOp(',')) { p++; names.push(ident()); }
+              op(')');
+              if (which === 'PRIMARY') pk = names; else if (which === 'UNIQUE') uniques.push(names);
+              if (which === 'FOREIGN') { kw('REFERENCES'); ident(); if (isOp('(')) { p++; ident(); while (isOp(',')) { p++; ident(); } op(')'); } }
+            }
+          } else {
+            const col = { name: ident(), type: '', pk: false, auto: false, unique: false, notnull: false, def: null };
+            const typeWords = [];
+            while (peek() && (peek().k === 'id' || (peek().k === 'op' && peek().v === '(' && typeWords.length))) {
+              if (isOp('(')) { while (!isOp(')')) p++; p++; continue; }
+              typeWords.push(toks[p++].v);
+            }
+            col.type = typeWords.join(' ').toUpperCase();
+            for (;;) {
+              if (isKw('PRIMARY')) { p++; kw('KEY'); col.pk = true; if (isKw('ASC') || isKw('DESC')) p++; continue; }
+              if (isKw('AUTOINCREMENT')) { p++; col.auto = true; continue; }
+              if (isKw('UNIQUE')) { p++; col.unique = true; continue; }
+              if (isKw('NOT')) { p++; kw('NULL'); col.notnull = true; continue; }
+              if (isKw('NULL')) { p++; continue; }
+              if (isKw('DEFAULT')) { p++; col.def = isOp('(') ? (p++, (() => { const e = expr(); op(')'); return e; })()) : unary(); continue; }
+              if (isKw('REFERENCES')) { p++; ident(); if (isOp('(')) { p++; ident(); op(')'); } continue; }
+              if (isKw('COLLATE')) { p++; ident(); continue; }
+              break;
+            }
+            cols.push(col);
+          }
+          if (!isOp(',')) break;
+          p++;
+        }
+        op(')');
+        return { n: 'create', name, ifNot, cols, pk, uniques };
+      }
+      if (isKw('DROP')) {
+        p++; kw('TABLE');
+        let ifExists = false;
+        if (isKw('IF')) { p++; kw('EXISTS'); ifExists = true; }
+        return { n: 'drop', name: ident(), ifExists };
+      }
+      if (isKw('INSERT') || isKw('REPLACE')) {
+        let conflict = null;
+        if (isKw('REPLACE')) { p++; conflict = 'REPLACE'; }
+        else { p++; if (isKw('OR')) { p++; conflict = toks[p++].v; } }
+        kw('INTO');
+        const table = ident();
+        let cols = null;
+        if (isOp('(')) { p++; cols = [ident()]; while (isOp(',')) { p++; cols.push(ident()); } op(')'); }
+        if (isKw('SELECT')) return { n: 'insert', table, cols, conflict, query: select() };
+        if (isKw('DEFAULT')) { p++; kw('VALUES'); return { n: 'insert', table, cols: [], conflict, rows: [[]] }; }
+        kw('VALUES');
+        const rows = [];
+        for (;;) {
+          op('(');
+          const r = [expr()];
+          while (isOp(',')) { p++; r.push(expr()); }
+          op(')');
+          rows.push(r);
+          if (!isOp(',')) break;
+          p++;
+        }
+        return { n: 'insert', table, cols, conflict, rows };
+      }
+      if (isKw('UPDATE')) {
+        p++;
+        const table = ident();
+        kw('SET');
+        const sets = [];
+        for (;;) { const c = ident(); op('='); sets.push([c, expr()]); if (!isOp(',')) break; p++; }
+        let where = null;
+        if (isKw('WHERE')) { p++; where = expr(); }
+        return { n: 'update', table, sets, where };
+      }
+      if (isKw('DELETE')) {
+        p++; kw('FROM');
+        const table = ident();
+        let where = null;
+        if (isKw('WHERE')) { p++; where = expr(); }
+        return { n: 'delete', table, where };
+      }
+      if (isKw('BEGIN') || isKw('COMMIT') || isKw('ROLLBACK')) { p++; if (isKw('TRANSACTION')) p++; return { n: 'noop' }; }
+      throw sqlSyntax(near());
+    }
+    const out = [];
+    for (;;) {
+      while (isOp(';')) p++;
+      if (p >= toks.length) break;
+      const st = statement();
+      st.params = params;
+      out.push(st);
+      params = 0;
+      if (p < toks.length && !isOp(';')) throw sqlSyntax(near());
+    }
+    return out;
+  }
+  /* values and comparisons follow SQLite's rules */
+  const sqlNull = v => v.t === 'NoneType';
+  const sqlRank = v => (sqlNull(v) ? 0 : v.t === 'int' || v.t === 'float' || v.t === 'bool' ? 1 : v.t === 'str' ? 2 : 3);
+  function sqlCompare(a, b) {
+    const ra = sqlRank(a), rb = sqlRank(b);
+    if (ra !== rb) return ra - rb;
+    if (ra === 1) return num(a) - num(b);
+    if (ra === 2) return a.v < b.v ? -1 : a.v > b.v ? 1 : 0;
+    return 0;
+  }
+  const numericText = s => /^\s*[-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?\s*$/.test(s);
+  function affinityOf(type) {
+    const t = (type || '').toUpperCase();
+    if (t.includes('INT')) return 'INTEGER';
+    if (/CHAR|CLOB|TEXT/.test(t)) return 'TEXT';
+    if (t.includes('BLOB') || !t) return 'BLOB';
+    if (/REAL|FLOA|DOUB/.test(t)) return 'REAL';
+    return 'NUMERIC';
+  }
+  function applyAffinity(v, aff) {
+    if (sqlNull(v)) return v;
+    if (v.t === 'bool') v = V.int(v.v ? 1 : 0);
+    if (aff === 'TEXT') return v.t === 'str' ? v : V.str(v.t === 'float' ? fmt(v) : String(num(v)));
+    if (aff === 'BLOB') return v;
+    if (v.t === 'str' && numericText(v.v)) { const n = Number(v.v); v = Number.isInteger(n) && !/[.eE]/.test(v.v) ? V.int(n) : V.float(n); }
+    if (aff === 'REAL' && v.t === 'int') return V.float(v.v);
+    if ((aff === 'INTEGER' || aff === 'NUMERIC') && v.t === 'float' && Number.isInteger(v.v) && Math.abs(v.v) < 9e15) return V.int(v.v);
+    return v;
+  }
+  function sqlArith(o, a, b) {
+    if (o === '||') return sqlNull(a) || sqlNull(b) ? V.none : V.str(sqlText(a) + sqlText(b));
+    if (sqlNull(a) || sqlNull(b)) return V.none;
+    const toNum = x => (x.t === 'str' ? (numericText(x.v) ? (/[.eE]/.test(x.v) ? V.float(Number(x.v)) : V.int(Number(x.v))) : V.int(0)) : x.t === 'bool' ? V.int(x.v ? 1 : 0) : x);
+    a = toNum(a); b = toNum(b);
+    const ints = a.t === 'int' && b.t === 'int';
+    const x = num(a), y = num(b);
+    switch (o) {
+      case '+': return ints ? V.int(x + y) : V.float(x + y);
+      case '-': return ints ? V.int(x - y) : V.float(x - y);
+      case '*': return ints ? V.int(x * y) : V.float(x * y);
+      case '/': if (y === 0) return V.none; return ints ? V.int(Math.trunc(x / y)) : V.float(x / y);
+      case '%': if (y === 0) return V.none; return ints ? V.int(x % y) : V.float(Math.trunc(x) % Math.trunc(y));
+    }
+    return V.none;
+  }
+  const sqlText = v => (sqlNull(v) ? '' : v.t === 'str' ? v.v : fmt(v));
+  const sqlTruth = v => (sqlNull(v) ? false : v.t === 'str' ? (numericText(v.v) ? Number(v.v) !== 0 : false) : num(v) !== 0);
+  const tri = b => (b == null ? V.none : V.int(b ? 1 : 0));
+  const AGG = ['COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'TOTAL', 'GROUP_CONCAT'];
+  const hasAgg = e => !!e && typeof e === 'object' && (e.n === 'fn' && AGG.includes(e.fn) && !(['MIN', 'MAX'].includes(e.fn) && e.args.length > 1) ? true : Object.values(e).some(v => (Array.isArray(v) ? v.some(x => (Array.isArray(x) ? x.some(hasAgg) : hasAgg(x))) : v && typeof v === 'object' && v.n ? hasAgg(v) : false)));
+  function makeSqlite(ctx) {
+    const base = makeClass('Error', [{ t: 'exctype', v: 'Exception' }], {});
+    const dbErr = makeClass('DatabaseError', [base], {});
+    SQL_ERR = {
+      Error: base, DatabaseError: dbErr,
+      OperationalError: makeClass('OperationalError', [dbErr], {}),
+      IntegrityError: makeClass('IntegrityError', [dbErr], {}),
+      ProgrammingError: makeClass('ProgrammingError', [dbErr], {}),
+      InterfaceError: makeClass('InterfaceError', [base], {}),
+    };
+    const ERR = SQL_ERR;
+    ctx.dbs = ctx.dbs || new Map();
+    /* running statements against a database */
+    function evalSql(e, row, args) {
+      switch (e.n) {
+        case 'lit': return e.v;
+        case 'param': return args.pos[e.i];
+        case 'named': { if (!args.named || !args.named.has(e.name)) throw sqlErr('ProgrammingError', `You did not supply a value for binding parameter :${e.name}.`); return args.named.get(e.name); }
+        case 'col': return row.get(e.table, e.name);
+        case 'neg': { const v = evalSql(e.e, row, args); return sqlNull(v) ? v : sqlArith('-', V.int(0), v); }
+        case 'bin': return sqlArith(e.op, evalSql(e.l, row, args), evalSql(e.r, row, args));
+        case 'cmp': {
+          let a = evalSql(e.l, row, args), b = evalSql(e.r, row, args);
+          if (sqlNull(a) || sqlNull(b)) return V.none;
+          const affL = e.l.n === 'col' ? row.aff(e.l.table, e.l.name) : null, affR = e.r.n === 'col' ? row.aff(e.r.table, e.r.name) : null;
+          if (affL && affL !== 'TEXT' && affL !== 'BLOB' && !affR) b = applyAffinity(b, 'NUMERIC');
+          if (affR && affR !== 'TEXT' && affR !== 'BLOB' && !affL) a = applyAffinity(a, 'NUMERIC');
+          if (affL === 'TEXT' && !affR && b.t !== 'str') b = applyAffinity(b, 'TEXT');
+          if (affR === 'TEXT' && !affL && a.t !== 'str') a = applyAffinity(a, 'TEXT');
+          const c = sqlCompare(a, b);
+          return tri({ '=': c === 0, '!=': c !== 0, '<': c < 0, '>': c > 0, '<=': c <= 0, '>=': c >= 0 }[e.op]);
+        }
+        case 'is': { const a = evalSql(e.l, row, args), b = evalSql(e.r, row, args); const same = sqlNull(a) || sqlNull(b) ? sqlNull(a) && sqlNull(b) : sqlCompare(a, b) === 0; return V.int(same !== e.neg ? 1 : 0); }
+        case 'like': {
+          const a = evalSql(e.l, row, args), pat = evalSql(e.r, row, args);
+          if (sqlNull(a) || sqlNull(pat)) return V.none;
+          const re = e.glob
+            ? new RegExp('^' + sqlText(pat).replace(/[.+^${}()|\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$', 's')
+            : new RegExp('^' + sqlText(pat).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*').replace(/_/g, '.') + '$', 'is');
+          return V.int(re.test(sqlText(a)) !== e.neg ? 1 : 0);
+        }
+        case 'in': case 'insel': {
+          const a = evalSql(e.l, row, args);
+          if (sqlNull(a)) return V.none;
+          const vals = e.n === 'in' ? e.items.map(x => evalSql(x, row, args)) : runSelect(e.q, args, row).rows.map(r => r[0]);
+          const hit = vals.some(v => !sqlNull(v) && sqlCompare(a, v) === 0);
+          if (!hit && vals.some(sqlNull)) return V.none;
+          return V.int(hit !== e.neg ? 1 : 0);
+        }
+        case 'between': {
+          const a = evalSql(e.l, row, args), lo = evalSql(e.lo, row, args), hi = evalSql(e.hi, row, args);
+          if ([a, lo, hi].some(sqlNull)) return V.none;
+          return V.int((sqlCompare(a, lo) >= 0 && sqlCompare(a, hi) <= 0) !== e.neg ? 1 : 0);
+        }
+        case 'not': { const v = evalSql(e.e, row, args); return sqlNull(v) ? V.none : V.int(sqlTruth(v) ? 0 : 1); }
+        case 'and': { const a = evalSql(e.l, row, args); if (!sqlNull(a) && !sqlTruth(a)) return V.int(0); const b = evalSql(e.r, row, args); if (!sqlNull(b) && !sqlTruth(b)) return V.int(0); return sqlNull(a) || sqlNull(b) ? V.none : V.int(1); }
+        case 'or': { const a = evalSql(e.l, row, args); if (!sqlNull(a) && sqlTruth(a)) return V.int(1); const b = evalSql(e.r, row, args); if (!sqlNull(b) && sqlTruth(b)) return V.int(1); return sqlNull(a) || sqlNull(b) ? V.none : V.int(0); }
+        case 'case': {
+          if (e.subject) { const s = evalSql(e.subject, row, args); for (const [w, t] of e.whens) { const v = evalSql(w, row, args); if (!sqlNull(s) && !sqlNull(v) && sqlCompare(s, v) === 0) return evalSql(t, row, args); } }
+          else for (const [w, t] of e.whens) if (sqlTruth(evalSql(w, row, args))) return evalSql(t, row, args);
+          return e.other ? evalSql(e.other, row, args) : V.none;
+        }
+        case 'fn': return sqlFunc(e, row, args);
+        case 'star': throw sqlSyntax('near "*": syntax error');
+      }
+      throw sqlSyntax('unsupported expression');
+    }
+    function sqlFunc(e, row, args) {
+      if (AGG.includes(e.fn) && !(['MIN', 'MAX'].includes(e.fn) && e.args.length > 1)) {
+        if (!row.group) throw sqlErr('OperationalError', `misuse of aggregate function ${e.fn}()`);
+        let vals = e.star ? row.group.map(() => V.int(1)) : row.group.map(r => evalSql(e.args[0], r, args)).filter(v => !sqlNull(v));
+        if (e.distinct) { const seen = []; vals = vals.filter(v => (seen.some(s => sqlCompare(s, v) === 0) ? false : (seen.push(v), true))); }
+        switch (e.fn) {
+          case 'COUNT': return V.int(vals.length);
+          case 'SUM': if (!vals.length) return V.none; return vals.every(v => v.t === 'int' || (v.t === 'str' && /^\s*[-+]?\d+\s*$/.test(v.v))) ? V.int(vals.reduce((t, v) => t + (v.t === 'str' ? Number(v.v) : num(v)), 0)) : V.float(vals.reduce((t, v) => t + (v.t === 'str' ? (numericText(v.v) ? Number(v.v) : 0) : num(v)), 0));
+          case 'TOTAL': return V.float(vals.reduce((t, v) => t + (v.t === 'str' ? (numericText(v.v) ? Number(v.v) : 0) : num(v)), 0));
+          case 'AVG': if (!vals.length) return V.none; return V.float(vals.reduce((t, v) => t + (v.t === 'str' ? (numericText(v.v) ? Number(v.v) : 0) : num(v)), 0) / vals.length);
+          case 'MIN': return vals.length ? vals.reduce((a, b) => (sqlCompare(b, a) < 0 ? b : a)) : V.none;
+          case 'MAX': return vals.length ? vals.reduce((a, b) => (sqlCompare(b, a) > 0 ? b : a)) : V.none;
+          case 'GROUP_CONCAT': { const sep = e.args[1] ? sqlText(evalSql(e.args[1], row.group[0] || row, args)) : ','; return vals.length ? V.str(vals.map(sqlText).join(sep)) : V.none; }
+        }
+      }
+      const a = e.args.map(x => evalSql(x, row, args));
+      const need = n => { if (a.length !== n) throw sqlErr('OperationalError', `wrong number of arguments to function ${e.fn.toLowerCase()}()`); };
+      switch (e.fn) {
+        case 'LOWER': need(1); return sqlNull(a[0]) ? V.none : V.str(sqlText(a[0]).toLowerCase());
+        case 'UPPER': need(1); return sqlNull(a[0]) ? V.none : V.str(sqlText(a[0]).toUpperCase());
+        case 'LENGTH': need(1); return sqlNull(a[0]) ? V.none : V.int([...sqlText(a[0])].length);
+        case 'ABS': need(1); return sqlNull(a[0]) ? V.none : a[0].t === 'int' ? V.int(Math.abs(a[0].v)) : V.float(Math.abs(num(sqlArith('+', a[0], V.int(0)))));
+        case 'ROUND': { if (sqlNull(a[0])) return V.none; const d = a[1] ? num(a[1]) : 0; const x = num(sqlArith('+', a[0], V.float(0))); const f = 10 ** d; return V.float(Math.sign(x) * Math.round(Math.abs(x) * f) / f); }
+        case 'COALESCE': case 'IFNULL': return a.find(v => !sqlNull(v)) || V.none;
+        case 'NULLIF': need(2); return !sqlNull(a[0]) && !sqlNull(a[1]) && sqlCompare(a[0], a[1]) === 0 ? V.none : a[0];
+        case 'SUBSTR': case 'SUBSTRING': { if (sqlNull(a[0])) return V.none; const s = [...sqlText(a[0])]; let st = num(a[1]); const len = a[2] ? num(a[2]) : s.length; st = st > 0 ? st - 1 : st < 0 ? s.length + st : 0; return V.str(s.slice(Math.max(0, st), Math.max(0, st) + len).join('')); }
+        case 'TRIM': return sqlNull(a[0]) ? V.none : V.str(sqlText(a[0]).trim());
+        case 'REPLACE': need(3); return sqlNull(a[0]) ? V.none : V.str(sqlText(a[0]).split(sqlText(a[1])).join(sqlText(a[2])));
+        case 'INSTR': need(2); return V.int(sqlText(a[0]).indexOf(sqlText(a[1])) + 1);
+        case 'TYPEOF': need(1); return V.str(sqlNull(a[0]) ? 'null' : a[0].t === 'int' ? 'integer' : a[0].t === 'float' ? 'real' : 'text');
+        case 'MIN': return a.some(sqlNull) ? V.none : a.reduce((x, y) => (sqlCompare(y, x) < 0 ? y : x));
+        case 'MAX': return a.some(sqlNull) ? V.none : a.reduce((x, y) => (sqlCompare(y, x) > 0 ? y : x));
+      }
+      throw sqlErr('OperationalError', `no such function: ${e.fn}`);
+    }
+    let curDb = null;
+    const tableOf = name => { const t = curDb.tables.get(name.toLowerCase()); if (!t) throw sqlErr('OperationalError', `no such table: ${name}`); return t; };
+    // a row context: values of every table in the FROM clause, plus the group for aggregates
+    function rowCtx(parts, outer) {
+      return {
+        parts, group: null,
+        find(table, name) {
+          const lname = name.toLowerCase();
+          const hits = [];
+          for (const pt of parts) {
+            if (table && pt.alias.toLowerCase() !== table.toLowerCase()) continue;
+            if (lname === 'rowid' || lname === 'oid' || lname === '_rowid_') { hits.push({ pt, idx: -1 }); continue; }
+            const idx = pt.table.cols.findIndex(c => c.name.toLowerCase() === lname);
+            if (idx >= 0) hits.push({ pt, idx });
+          }
+          return hits;
+        },
+        get(table, name) {
+          const hits = this.find(table, name);
+          if (!hits.length) {
+            if (this.aliases && !table && this.aliases.has(name.toLowerCase())) return this.aliases.get(name.toLowerCase());
+            if (outer) return outer.get(table, name);
+            throw sqlErr('OperationalError', `no such column: ${table ? table + '.' : ''}${name}`);
+          }
+          if (hits.length > 1 && !table) throw sqlErr('OperationalError', `ambiguous column name: ${name}`);
+          const { pt, idx } = hits[0];
+          if (!pt.row) return V.none;
+          return idx < 0 ? V.int(pt.row.rowid) : pt.row.vals[idx];
+        },
+        aff(table, name) { const hits = this.find(table, name); if (hits.length !== 1) return null; const { pt, idx } = hits[0]; return idx < 0 ? 'INTEGER' : affinityOf(pt.table.cols[idx].type); },
+      };
+    }
+    function checkColumns(q, outer) {
+      const refs = q.from.map(ref => ({ alias: ref.alias, table: tableOf(ref.name) }));
+      const aliases = new Set(q.cols.filter(c => c.alias).map(c => c.alias.toLowerCase()));
+      const known = (t, name) => {
+        const lname = name.toLowerCase();
+        if (['rowid', 'oid', '_rowid_'].includes(lname)) return true;
+        return refs.some(r => (!t || r.alias.toLowerCase() === t.toLowerCase()) && r.table.cols.some(c => c.name.toLowerCase() === lname));
+      };
+      const walk = (e, allowAlias) => {
+        if (!e || typeof e !== 'object') return;
+        if (e.n === 'col') { if (!known(e.table, e.name) && !(allowAlias && !e.table && aliases.has(e.name.toLowerCase())) && !outer) throw sqlErr('OperationalError', `no such column: ${e.table ? e.table + '.' : ''}${e.name}`); return; }
+        if (e.n === 'insel') { walk(e.l, allowAlias); return; }
+        for (const v of Object.values(e)) { if (Array.isArray(v)) v.forEach(x => (Array.isArray(x) ? x.forEach(y => walk(y, allowAlias)) : walk(x, allowAlias))); else if (v && typeof v === 'object' && v.n) walk(v, allowAlias); }
+      };
+      for (const c of q.cols) if (c.e.n !== 'star') walk(c.e, false);
+      for (const ref of q.from) walk(ref.on, false);
+      walk(q.where, false);
+      (q.group || []).forEach(g => walk(g, true));
+      walk(q.having, true);
+      (q.order || []).forEach(o => walk(o.e, true));
+    }
+    function runSelect(q, args, outer) {
+      checkColumns(q, outer);
+      // FROM and JOINs build every combination of rows that survives the ON conditions
+      let combos = [[]];
+      for (const ref of q.from) {
+        const table = tableOf(ref.name);
+        const next = [];
+        for (const combo of combos) {
+          let matched = false;
+          for (const r of table.rows) {
+            const parts = [...combo, { alias: ref.alias, table, row: r }];
+            if (ref.on && !sqlTruth(evalSql(ref.on, rowCtx(parts, outer), args))) continue;
+            next.push(parts);
+            matched = true;
+          }
+          if (ref.join === 'left' && !matched) next.push([...combo, { alias: ref.alias, table, row: null }]);
+        }
+        combos = next;
+      }
+      if (!q.from.length) combos = [[]];
+      let rows = combos.map(parts => rowCtx(parts, outer));
+      if (q.where) rows = rows.filter(r => sqlTruth(evalSql(q.where, r, args)));
+      // the output columns
+      const expand = [];
+      for (const c of q.cols) {
+        if (c.e.n === 'star') {
+          const parts = q.from.length ? (combos[0] || q.from.map(ref => ({ alias: ref.alias, table: tableOf(ref.name), row: null }))) : [];
+          const use = c.e.table ? parts.filter(pt => pt.alias.toLowerCase() === c.e.table.toLowerCase()) : parts;
+          if (c.e.table && !use.length) throw sqlErr('OperationalError', `no such table: ${c.e.table}`);
+          for (const pt of use) pt.table.cols.forEach(col => expand.push({ e: { n: 'col', table: pt.alias, name: col.name }, name: col.name }));
+        } else expand.push({ e: c.e, name: c.alias || (c.e.n === 'col' ? c.e.name : c.text) });
+      }
+      const grouped = q.group || expand.some(c => hasAgg(c.e)) || (q.having && hasAgg(q.having)) || (q.order || []).some(o => hasAgg(o.e));
+      let out;
+      if (grouped) {
+        const groups = new Map();
+        if (q.group) {
+          for (const r of rows) {
+            const key = JSON.stringify(q.group.map(g => { const v = evalSql(g, r, args); return [sqlRank(v), sqlNull(v) ? null : v.t === 'str' ? v.v : num(v)]; }));
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(r);
+          }
+        } else groups.set('all', rows);
+        out = [];
+        for (const g of groups.values()) {
+          const rep = g[0] || rowCtx(q.from.map(ref => ({ alias: ref.alias, table: tableOf(ref.name), row: null })), outer);
+          const gr = Object.assign(Object.create(rep), { group: g });
+          const vals = expand.map(c => evalSql(c.e, gr, args));
+          if (q.having) {
+            const aliases = new Map();
+            expand.forEach((c, i) => { if (c.name) aliases.set(c.name.toLowerCase(), vals[i]); });
+            if (!sqlTruth(evalSql(q.having, Object.assign(Object.create(gr), { aliases }), args))) continue;
+          }
+          out.push({ ctx: gr, vals });
+        }
+      } else out = rows.map(r => ({ ctx: r, vals: expand.map(c => evalSql(c.e, r, args)) }));
+      if (q.distinct) { const seen = new Set(); out = out.filter(o => { const k = JSON.stringify(o.vals.map(v => [sqlRank(v), sqlNull(v) ? null : v.t === 'str' ? v.v : num(v)])); if (seen.has(k)) return false; seen.add(k); return true; }); }
+      if (q.order) {
+        const aliasMap = o => { const m = new Map(); expand.forEach((c, i) => { if (c.name) m.set(c.name.toLowerCase(), o.vals[i]); }); return m; };
+        const keyOfRow = o => q.order.map(ob => {
+          if (ob.e.n === 'lit' && ob.e.v.t === 'int') { const k = ob.e.v.v - 1; if (k < 0 || k >= expand.length) throw sqlErr('OperationalError', `${ob.e.v.v}st ORDER BY term out of range - should be between 1 and ${expand.length}`); return o.vals[k]; }
+          const c = Object.assign(Object.create(o.ctx), { aliases: aliasMap(o) });
+          if (ob.e.n === 'col' && !ob.e.table) { const hit = expand.findIndex(x => x.name && x.name.toLowerCase() === ob.e.name.toLowerCase() && !(x.e.n === 'col')); if (hit >= 0) return o.vals[hit]; }
+          return evalSql(ob.e, c, args);
+        });
+        const keyed = out.map((o, i) => ({ o, k: keyOfRow(o), i }));
+        keyed.sort((a, b) => { for (let j = 0; j < q.order.length; j++) { const c = sqlCompare(a.k[j], b.k[j]); if (c) return q.order[j].desc ? -c : c; } return a.i - b.i; });
+        out = keyed.map(x => x.o);
+      }
+      if (q.limit) {
+        const lim = num(evalSql(q.limit, rowCtx([]), args)), off = q.offset ? num(evalSql(q.offset, rowCtx([]), args)) : 0;
+        out = out.slice(off, lim < 0 ? undefined : off + lim);
+      }
+      return { names: expand.map(c => c.name), rows: out.map(o => o.vals) };
+    }
+    function insertRow(table, cols, vals, conflict, cur) {
+      const row = { rowid: 0, vals: table.cols.map(c => (c.def ? evalSql(c.def, rowCtx([]), { pos: [] }) : V.none)) };
+      let rowidGiven = null;
+      cols.forEach((name, i) => {
+        const lname = name.toLowerCase();
+        if (lname === 'rowid' || lname === 'oid' || lname === '_rowid_') { rowidGiven = vals[i]; return; }
+        const idx = table.cols.findIndex(c => c.name.toLowerCase() === lname);
+        if (idx < 0) throw sqlErr('OperationalError', `table ${table.name} has no column named ${name}`);
+        row.vals[idx] = applyAffinity(vals[i], affinityOf(table.cols[idx].type));
+      });
+      const ipk = table.cols.findIndex(c => c.pk && c.type === 'INTEGER');
+      if (ipk >= 0 && !sqlNull(row.vals[ipk])) rowidGiven = row.vals[ipk];
+      if (rowidGiven && !sqlNull(rowidGiven)) {
+        if (rowidGiven.t !== 'int') throw sqlErr('IntegrityError', 'datatype mismatch');
+        row.rowid = rowidGiven.v;
+      } else {
+        row.rowid = Math.max(table.maxRowid, ...table.rows.map(r => r.rowid), 0) + 1;
+        if (table.cols.some(c => c.auto)) table.maxRowid = row.rowid;
+      }
+      if (ipk >= 0) row.vals[ipk] = V.int(row.rowid);
+      for (const [i, c] of table.cols.entries()) if (c.notnull && sqlNull(row.vals[i]) && i !== ipk) {
+        if (conflict === 'IGNORE') return false;
+        throw sqlErr('IntegrityError', `NOT NULL constraint failed: ${table.name}.${c.name}`);
+      }
+      // unique keys: the rowid, single UNIQUE/PRIMARY KEY columns, and composite keys
+      const keys = [];
+      table.cols.forEach((c, i) => { if ((c.unique || c.pk) && i !== ipk) keys.push([i]); });
+      if (table.pk && !(table.pk.length === 1 && ipk >= 0 && table.cols[ipk].name.toLowerCase() === table.pk[0].toLowerCase())) keys.push(table.pk.map(n => table.cols.findIndex(c => c.name.toLowerCase() === n.toLowerCase())));
+      for (const u of table.uniques) keys.push(u.map(n => table.cols.findIndex(c => c.name.toLowerCase() === n.toLowerCase())));
+      const clash = table.rows.find(r => r.rowid === row.rowid);
+      const keyClash = keys.map(k => [k, table.rows.find(r => k.every(i => !sqlNull(row.vals[i]) && !sqlNull(r.vals[i]) && sqlCompare(r.vals[i], row.vals[i]) === 0))]).find(([, r]) => r);
+      if (clash || keyClash) {
+        if (conflict === 'IGNORE') return false;
+        if (conflict === 'REPLACE') { table.rows = table.rows.filter(r => r !== clash && (!keyClash || r !== keyClash[1])); }
+        else if (clash) throw sqlErr('IntegrityError', `UNIQUE constraint failed: ${table.name}.${ipk >= 0 ? table.cols[ipk].name : 'rowid'}`);
+        else throw sqlErr('IntegrityError', `UNIQUE constraint failed: ${keyClash[0].map(i => table.name + '.' + table.cols[i].name).join(', ')}`);
+      }
+      table.rows.push(row);
+      table.maxRowid = Math.max(table.maxRowid, row.rowid);
+      cur.lastrowid = row.rowid;
+      return true;
+    }
+    function execOne(st, args, cur) {
+      cur.rows = []; cur.pos = 0; cur.description = V.none; cur.rowcount = -1;
+      switch (st.n) {
+        case 'noop': return;
+        case 'create': {
+          const key = st.name.toLowerCase();
+          if (curDb.tables.has(key)) { if (st.ifNot) return; throw sqlErr('OperationalError', `table ${st.name} already exists`); }
+          curDb.tables.set(key, { name: st.name, cols: st.cols, pk: st.pk, uniques: st.uniques, rows: [], maxRowid: 0 });
+          return;
+        }
+        case 'drop': {
+          const key = st.name.toLowerCase();
+          if (!curDb.tables.has(key)) { if (st.ifExists) return; throw sqlErr('OperationalError', `no such table: ${st.name}`); }
+          curDb.tables.delete(key);
+          return;
+        }
+        case 'insert': {
+          const table = tableOf(st.table);
+          const cols = st.cols || table.cols.map(c => c.name);
+          const rowsVals = st.query ? runSelect(st.query, args).rows : st.rows.map(r => r.map(e => evalSql(e, rowCtx([]), args)));
+          let n = 0;
+          for (const vals of rowsVals) {
+            if (vals.length !== cols.length) throw sqlErr('OperationalError', `table ${table.name} has ${table.cols.length} columns but ${vals.length} values were supplied`);
+            if (insertRow(table, cols, vals, st.conflict, cur)) n++;
+          }
+          cur.rowcount = n;
+          return;
+        }
+        case 'update': {
+          const table = tableOf(st.table);
+          let n = 0;
+          for (const r of table.rows) {
+            const rc = rowCtx([{ alias: table.name, table, row: r }]);
+            if (st.where && !sqlTruth(evalSql(st.where, rc, args))) continue;
+            const newVals = st.sets.map(([c, e]) => [c, evalSql(e, rc, args)]);
+            for (const [c, v] of newVals) {
+              const idx = table.cols.findIndex(col => col.name.toLowerCase() === c.toLowerCase());
+              if (idx < 0) throw sqlErr('OperationalError', `no such column: ${c}`);
+              r.vals[idx] = applyAffinity(v, affinityOf(table.cols[idx].type));
+            }
+            n++;
+          }
+          cur.rowcount = n;
+          return;
+        }
+        case 'delete': {
+          const table = tableOf(st.table);
+          const before = table.rows.length;
+          table.rows = table.rows.filter(r => st.where && !sqlTruth(evalSql(st.where, rowCtx([{ alias: table.name, table, row: r }]), args)));
+          cur.rowcount = before - table.rows.length;
+          return;
+        }
+        case 'select': {
+          const res = runSelect(st, args);
+          cur.rows = res.rows.map(r => V.tuple(r));
+          cur.description = V.tuple(res.names.map(n => V.tuple([V.str(n), V.none, V.none, V.none, V.none, V.none, V.none])));
+          return;
+        }
+      }
+    }
+    function bindArgs(st, params) {
+      if (!params || params.t === 'NoneType') params = V.tuple([]);
+      if (params.t === 'dict') {
+        const named = new Map();
+        for (const [k, v] of params.v.values()) named.set(fmt(k), v);
+        return { pos: [], named };
+      }
+      let pos;
+      // a plain string is a sequence of letters, the famous "use (name,)" mistake
+      if (params.t === 'str') pos = [...params.v].map(V.str);
+      else if (params.t === 'tuple' || params.t === 'list') pos = params.v.map(v => (v.t === 'bool' ? V.int(v.v ? 1 : 0) : v));
+      else throw sqlErr('ProgrammingError', 'parameters are of unsupported type');
+      for (const v of pos) if (!['int', 'float', 'str', 'NoneType'].includes(v.t)) throw sqlErr('ProgrammingError', `Error binding parameter 1: type '${typeName(v)}' is not supported`);
+      if (pos.length !== st.params) throw sqlErr('ProgrammingError', `Incorrect number of bindings supplied. The current statement uses ${st.params}, and there are ${pos.length} supplied.`);
+      return { pos };
+    }
+    const CONN = makeClass('Connection', [], {});
+    const CUR_ = makeClass('Cursor', [], {});
+    const newCursor = conn => { const c = { t: 'instance', cls: CUR_, attrs: new Map(), conn, rows: [], pos: 0, rowcount: -1, lastrowid: null, description: V.none, closed: false }; return c; };
+    const checkOpen = c => { if (c.conn.closed) throw sqlErr('ProgrammingError', 'Cannot operate on a closed database.'); if (c.closed) throw sqlErr('ProgrammingError', 'Cannot operate on a closed cursor.'); };
+    const execute = (c, sqlV, params) => {
+      checkOpen(c);
+      if (!sqlV || sqlV.t !== 'str') throw new PyError('TypeError', 'execute() argument 1 must be str');
+      curDb = c.conn.db;
+      const stmts = sqlParse(sqlV.v, sqlTokens(sqlV.v));
+      if (stmts.length > 1) throw sqlErr('ProgrammingError', 'You can only execute one statement at a time.');
+      if (!stmts.length) return c;
+      execOne(stmts[0], bindArgs(stmts[0], params), c);
+      return c;
+    };
+    const curDict = {
+      execute: nat('execute', ([c, sqlV, params]) => execute(c, sqlV, params)),
+      executemany: nat('executemany', ([c, sqlV, seq]) => {
+        checkOpen(c);
+        curDb = c.conn.db;
+        const stmts = sqlParse(sqlV.v, sqlTokens(sqlV.v));
+        let total = 0;
+        for (const params of iterate(seq)) { execOne(stmts[0], bindArgs(stmts[0], params), c); total += Math.max(0, c.rowcount); }
+        c.rowcount = total;
+        return c;
+      }),
+      executescript: nat('executescript', ([c, sqlV]) => { checkOpen(c); curDb = c.conn.db; for (const st of sqlParse(sqlV.v, sqlTokens(sqlV.v))) execOne(st, { pos: [] }, c); return c; }),
+      fetchone: nat('fetchone', ([c]) => (c.pos < c.rows.length ? c.rows[c.pos++] : V.none)),
+      fetchall: nat('fetchall', ([c]) => { const r = c.rows.slice(c.pos); c.pos = c.rows.length; return V.list(r); }),
+      fetchmany: nat('fetchmany', ([c, n]) => { const k = n ? num(n) : 1; const r = c.rows.slice(c.pos, c.pos + k); c.pos += r.length; return V.list(r); }),
+      close: nat('close', ([c]) => { c.closed = true; return V.none; }),
+      __iter__: nat('__iter__', ([c]) => mkIter('sqlite3.Cursor', () => (c.pos < c.rows.length ? c.rows[c.pos++] : DONE))),
+      lastrowid: { t: 'property', fget: nat('get', ([c]) => (c.lastrowid == null ? V.none : V.int(c.lastrowid))), fset: null },
+      rowcount: { t: 'property', fget: nat('get', ([c]) => V.int(c.rowcount)), fset: null },
+      description: { t: 'property', fget: nat('get', ([c]) => c.description), fset: null },
+    };
+    for (const k in curDict) CUR_.dict.set(k, curDict[k]);
+    const connDict = {
+      cursor: nat('cursor', ([conn]) => { if (conn.closed) throw sqlErr('ProgrammingError', 'Cannot operate on a closed database.'); return newCursor(conn); }),
+      execute: nat('execute', ([conn, sqlV, params]) => execute(newCursor(conn), sqlV, params)),
+      executemany: nat('executemany', ([conn, sqlV, seq]) => callValue(CUR_.dict.get('executemany'), [newCursor(conn), sqlV, seq], {}, ctx)),
+      executescript: nat('executescript', ([conn, sqlV]) => callValue(CUR_.dict.get('executescript'), [newCursor(conn), sqlV], {}, ctx)),
+      commit: nat('commit', ([conn]) => { if (conn.closed) throw sqlErr('ProgrammingError', 'Cannot operate on a closed database.'); return V.none; }),
+      rollback: nat('rollback', () => V.none),
+      close: nat('close', ([conn]) => { conn.closed = true; return V.none; }),
+      __enter__: nat('__enter__', ([conn]) => conn),
+      __exit__: nat('__exit__', () => V.bool(false)),
+    };
+    for (const k in connDict) CONN.dict.set(k, connDict[k]);
+    return mkModule('sqlite3', {
+      connect: nat('connect', ([name]) => {
+        const key = name ? fmt(name) : ':memory:';
+        let db;
+        if (key === ':memory:') db = { tables: new Map() };
+        else { if (!ctx.dbs.has(key)) ctx.dbs.set(key, { tables: new Map() }); db = ctx.dbs.get(key); }
+        return { t: 'instance', cls: CONN, attrs: new Map(), db, closed: false };
+      }),
+      ...Object.fromEntries(Object.entries(ERR).map(([k, v]) => [k, v])),
+      sqlite_version: V.str('3.45.0'),
+    });
+  }
+  const MODULES = { copy: makeCopy, sqlite3: makeSqlite, 'xml.etree.ElementTree': makeEtree, datetime: makeDatetime, logging: makeLogging, pathlib: makePathlib, os: makeOs, 'os.path': ctx => makeOs(ctx).members.get('path'), shutil: makeShutil, argparse: makeArgparse, random: makeRandom, math: makeMath, statistics: makeStatistics, json: makeJson, csv: makeCsv, sys: makeSys, re: makeRe, pytest: makePytest, requests: makeRequests, string: STRING_MOD };
   function loadModule(name, ctx) {
     if (ctx.modules[name]) return ctx.modules[name];
     if (ctx.userModules && ctx.userModules[name]) return (ctx.modules[name] = runUserModule(name, ctx));
