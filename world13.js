@@ -6,7 +6,7 @@ const API = 'https://api.bazaar.dev';
 
 const WORLD13 = {
   id: 13, name: 'The Great Bazaar', topic: 'libraries and modules', map: 'bg-map13.jpg',
-  nodes: [[50, 92], [28, 83], [70, 74], [32, 64], [68, 54], [30, 44], [66, 34], [36, 23], [50, 9]],
+  nodes: [[50, 94], [26, 86], [70, 78], [32, 70], [68, 61], [30, 52], [70, 43], [32, 34], [66, 25], [38, 16], [50, 7]],
   levels: [
     {
       id: '13-1', title: 'Borrowing spells', bg: 'bazaar', npc: 'vendor', mentor: 'vendor', tags: ['modules'],
@@ -44,6 +44,20 @@ const WORLD13 = {
         },
       ],
       learn: [{ title: 'import', code: 'import math\nfrom math import sqrt\nimport math as m', text: 'Borrow code from a library. Keep the dot, pull one name in, or rename it with as.' }],
+    },
+
+    {
+      id: '13-1b', title: 'Installing new spells', bg: 'bazaar', npc: 'courier', mentor: 'courier', tags: [], late: true,
+      steps: [
+        { type: 'talk', who: 'courier', text: 'Python comes with lots of libraries, but thousands more live on PyPI, the Python Package Index. You install them in the terminal, not inside Python: pip install cowsay.' },
+        { type: 'talk', who: 'courier', text: 'Each project can get its own virtual environment, a private shelf of libraries: python -m venv .venv makes one, and activating it makes pip install into it. Then two projects can never break each other.' },
+        { type: 'predict', shell: true, text: 'You want the requests library on your computer. What do you type in the terminal?', code: ['$ ...'], choices: ['pip install requests', 'import requests', 'python requests'], answer: 0, explain: 'pip install downloads a library from PyPI. import is what you write in your .py file afterwards.' },
+        { type: 'predict', shell: true, text: 'cowsay is installed. Which line goes at the top of your Python file?', code: ['$ pip install cowsay', 'Successfully installed cowsay'], choices: ['import cowsay', 'pip install cowsay', 'install cowsay'], answer: 0, explain: 'Installing happens once in the terminal. import is how each program uses it.' },
+        { type: 'predict', shell: true, text: 'What does this command do?', code: ['$ python -m venv .venv'], choices: ['Makes a private folder for this project\'s libraries', 'Installs Python itself', 'Runs a program called venv'], answer: 0, explain: 'venv creates a virtual environment in the .venv folder.' },
+        { type: 'predict', shell: true, text: 'In a brand new virtual environment, before any pip install, this runs. What happens?', code: ['$ python', '>>> import requests'], choices: ['ModuleNotFoundError', 'It works', 'SyntaxError'], answer: 0, explain: 'A fresh environment only has the standard library. Install requests into it first.' },
+        { type: 'predict', shell: true, text: 'How do you save the list of libraries your project needs, so someone else can install the same ones?', code: ['$ ...'], choices: ['pip freeze > requirements.txt', 'pip save', 'python -m list'], answer: 0, explain: 'requirements.txt lists the libraries. Others run pip install -r requirements.txt.' },
+      ],
+      learn: [{ title: 'pip and venv', code: 'python -m venv .venv\npip install cowsay\npip freeze > requirements.txt', text: 'Install libraries from PyPI into a private environment for each project.' }],
     },
     {
       id: '13-2', title: 'Dice of fate', bg: 'bazaar', npc: 'vendor', mentor: 'vendor', tags: ['randomq'],
@@ -174,6 +188,47 @@ const WORLD13 = {
         },
       ],
       learn: [{ title: 'sys.argv', code: 'import sys\nsys.argv[1]\nsys.exit("message")', text: 'The words typed after the file name, as a list of strings. sys.exit stops the program.' }],
+    },
+
+    {
+      id: '13-5b', title: 'Options and flags', bg: 'bazaar', npc: 'courier', mentor: 'courier', tags: ['argparseq'], late: true,
+      steps: [
+        { type: 'talk', who: 'courier', text: 'Reading options like -n 3 from sys.argv by hand gets messy fast. The argparse library does it for you: it reads the options, converts their types, fills in defaults, and even writes a help page for -h.' },
+        { type: 'demo', argv: ['meow.py', '-n', '3'], text: 'Run it. Typed: python meow.py -n 3', code: ['import argparse', 'parser = argparse.ArgumentParser(description="Meow like a cat")', 'parser.add_argument("-n", default=1, help="number of times to meow", type=int)', 'args = parser.parse_args()', 'for _ in range(args.n):', '    print("meow")'] },
+        {
+          type: 'predict', argv: ['meow.py'], text: 'Typed with no options at all: python meow.py. What will it say?',
+          code: ['import argparse', 'parser = argparse.ArgumentParser()', 'parser.add_argument("-n", default=1, type=int)', 'args = parser.parse_args()', 'print("meow" * args.n)'],
+          wrong: ['Error', 'meowmeow', ''],
+          explain: 'No -n was typed, so args.n is the default, 1.',
+        },
+        {
+          type: 'predict', vars: R => ({ w: R.pick(['hello', 'dragon', 'quest']) }), argv: ['shout.py', '$w', '--loud'], text: 'Typed: python shout.py $w --loud. What will it say?',
+          code: ['import argparse', 'parser = argparse.ArgumentParser()', 'parser.add_argument("--loud", action="store_true")', 'parser.add_argument("word")', 'args = parser.parse_args()', 'print(args.word.upper() if args.loud else args.word)'],
+          wrong: ['$w', '--loud', 'True'],
+          explain: 'action="store_true" makes --loud a switch: True when typed. word gets the other word.',
+        },
+        {
+          type: 'predict', argv: ['meow.py', '-h'], text: 'Typed: python meow.py -h. What will it say?',
+          code: ['import argparse', 'parser = argparse.ArgumentParser()', 'parser.add_argument("-n", default=1, help="number of times", type=int)', 'args = parser.parse_args()', 'print("meow")'],
+          wrong: ['meow', 'usage: meow.py [-h] [-n N] / meow'],
+          explain: '-h prints the help page that argparse writes for you, then stops the program before the last line.',
+        },
+        {
+          type: 'fill', vars: R => ({ n: R.int(2, 5) }), argv: ['roll.py', '--dice', '$n'], text: 'Typed: python roll.py --dice $n. Make args.dice a number.',
+          lines: ['import argparse', 'parser = argparse.ArgumentParser()', 'parser.add_argument("--dice", type=[], default=1)', 'args = parser.parse_args()', 'print(args.[] * 6, "sides in total")'],
+          chips: ['int', 'dice', 'str', 'n'], answer: [['int', 'dice']],
+          hints: ['type=int converts the typed text.', 'The value is stored as args.dice.'],
+        },
+        {
+          type: 'write', vars: R => ({ n: R.pick(Engine.NAMES), t: R.int(2, 4) }), argv: ['greet.py', '$n', '-t', '$t'],
+          text: 'Typed: python greet.py $n -t $t. Use argparse with a positional argument "name" and an option "-t" (type=int, default=1). Print "hi " + the name, args.t times.',
+          starter: ['import argparse', 'parser = argparse.ArgumentParser()'], keys: ['parser.add_argument', '(', ')', '"name"', '"-t"', 'type=int', 'default=1', ',', 'args', '=', 'parser.parse_args()', 'for', '_', 'in', 'range', 'args.t', ':', 'print', '"hi " + args.name'],
+          require: l => (has(l, /add_argument\(\s*"name"/) && has(l, /parse_args\(\)/) ? null : 'Add the "name" argument and call parse_args().'),
+          hints: ['parser.add_argument("name") / parser.add_argument("-t", type=int, default=1)', 'args = parser.parse_args() / for _ in range(args.t): / print("hi " + args.name)'],
+          solution: ['parser.add_argument("name")', 'parser.add_argument("-t", type=int, default=1)', 'args = parser.parse_args()', 'for _ in range(args.t):', '    print("hi " + args.name)'],
+        },
+      ],
+      learn: [{ title: 'argparse', code: 'parser.add_argument("-n", type=int, default=1)\nargs = parser.parse_args()', text: 'Reads command-line options, converts them and writes a -h help page.' }],
     },
     {
       id: '13-6', title: 'Scrolls that travel', bg: 'bazaar', npc: 'vendor', mentor: 'vendor', tags: ['jsonq'],

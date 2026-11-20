@@ -73,6 +73,12 @@ function checkFormats(raw, lv, k, seed, foe) {
     }
   }
 }
+function checkHardPredict(raw, lv, k, seed, foe) {
+  const st = Engine.instantiate(raw, { R: Engine.makeR(seed * 104723 + k), hero: HERO, foe: foe ? { ...foe } : null, hard: true, remix: 0.75 });
+  if (st.type !== 'predict' || !st.typed) return;
+  if (!Engine.answerOk(st, st.choices[st.answer])) bad(lv, k, '[hard] the right answer is not accepted when typed: ' + st.choices[st.answer]);
+  st.choices.forEach((ch, j) => { if (j !== st.answer && Engine.answerOk(st, ch)) bad(lv, k, '[hard] a wrong answer is accepted when typed: ' + ch); });
+}
 function checkHard(raw, lv, k, seed, foe) {
   const R = Engine.makeR(seed * 7919 + k * 13);
   let st;
@@ -111,13 +117,14 @@ for (const w of WORLDS) {
         } else if (st.type === 'predict') {
           const r = Py.run(st.code, Engine.runOpts(st));
           if (r.unordered && !st.measure) bad(lv, k, 'the answer depends on the printing order of a set (real Python varies). Use sorted().');
-          if (!st.reward && seed <= 6) checkFormats(raw, lv, k, seed, foe);
+          if (!st.reward && !st.shell && seed <= 6) checkFormats(raw, lv, k, seed, foe);
+          if (seed <= 4) checkHardPredict(raw, lv, k, seed, foe);
           const truth = st.measure === 'errtype' ? (r.error ? r.error.type : 'No error') : r.error ? 'Error' : st.measure === 'damage' ? String(Engine.damageOf(r, foe)) : r.output.join(' / ');
           applyCasts(r, foe);
           if (st.reward && foe) foe.hp = Math.max(0, foe.hp - dmg(st.reward, foe));
           if (st.choices.length !== 3) bad(lv, k, `has ${st.choices.length} choices`);
           if (new Set(st.choices).size !== st.choices.length) bad(lv, k, 'duplicate choices ' + JSON.stringify(st.choices));
-          if (st.choices[st.answer] !== truth && st.choices[st.answer] !== 'Something strange') bad(lv, k, `answer "${st.choices[st.answer]}" but code gives "${truth}" (seed ${seed})`);
+          if (!st.shell && st.choices[st.answer] !== truth && st.choices[st.answer] !== 'Something strange') bad(lv, k, `answer "${st.choices[st.answer]}" but code gives "${truth}" (seed ${seed})`);
           if (r.error && r.error.type === 'SpellTimeout') bad(lv, k, 'predict code times out');
         } else if (st.type === 'fill') {
           if (seed <= 4) checkHard(raw, lv, k, seed, foe);

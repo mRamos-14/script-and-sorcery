@@ -13,7 +13,7 @@
   const SAVE_KEY = 'script-sorcery-v1';
   const DEFAULT_HERO = { name: 'Pip', hair: 1, skin: 1, robe: 0, hat: 1, gem: 0, hatStyle: 'wizard', pet: 'none' };
   const DEFAULT_SETTINGS = { mute: false, music: true, sfx: true, musicVol: 0.6, sfxVol: 0.8, vibrate: true };
-  function freshSave() { return { hero: null, done: {}, xp: 0, gold: 0, streak: 0, lastDay: null, settings: { ...DEFAULT_SETTINGS }, world: 0, arenaBest: 0, towerBest: 0, weak: {}, hard: {}, hardOn: {}, owned: { hats: ['wizard', 'none'], pets: ['none'] } }; }
+  function freshSave() { return { hero: null, done: {}, xp: 0, gold: 0, streak: 0, lastDay: null, settings: { ...DEFAULT_SETTINGS }, world: 0, arenaBest: 0, towerBest: 0, weak: {}, hard: {}, mode: 'normal', owned: { hats: ['wizard', 'none'], pets: ['none'] } }; }
   function loadSave() {
     let s = null;
     try { s = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { /* storage blocked */ }
@@ -530,8 +530,13 @@
   $('#btn-creator-back').onclick = () => show(save.hero ? 'map' : 'title');
 
   /* ---------------- map ---------------- */
-  const worldUnlocked = w => w === 0 || WORLDS[w - 1].levels.every(l => save.done[l.id]);
-  const levelUnlocked = (w, i) => (i === 0 ? worldUnlocked(w) : !!save.done[WORLDS[w].levels[i - 1].id]);
+  // Hard worlds open once every world is beaten; they keep their own stars
+  const allBeaten = () => WORLDS.every(w => w.levels.every(l => l.late || save.done[l.id]));
+  const inHard = () => save.mode === 'hard' && allBeaten();
+  const prog = () => (inHard() ? save.hard || (save.hard = {}) : save.done);
+  // levels added in later updates (late: true) never lock a world you already cleared
+  const worldUnlocked = w => w === 0 || WORLDS[w - 1].levels.every(l => l.late || prog()[l.id]);
+  const levelUnlocked = (w, i) => !!prog()[WORLDS[w].levels[i].id] || (i === 0 ? worldUnlocked(w) : !!prog()[WORLDS[w].levels[i - 1].id]);
   /* ---------------- hero growth ----------------
      Each level needs a bit more XP than the last, so levels keep coming all game.
      Levels bring ranks, extra hearts, a mana ward, a stronger glow, more gold,
@@ -635,16 +640,19 @@
     const pts = W.nodes.map(([x, y]) => `${x},${y}`).join(' ');
     $('#map-path').setAttribute('points', pts);
     $('#map-path-under').setAttribute('points', pts);
-    let current = W.levels.findIndex((l, i) => levelUnlocked(save.world, i) && !save.done[l.id]);
+    const P = prog(), hardMap = inHard();
+    $('#map-wrap').classList.toggle('hard', hardMap);
+    $('#map-sub').textContent = `${hardMap ? 'HARD · ' : ''}${W.name} · ${W.topic}`;
+    let current = W.levels.findIndex((l, i) => levelUnlocked(save.world, i) && !P[l.id]);
     W.levels.forEach((lv, i) => {
       const [x, y] = W.nodes[i];
       const b = document.createElement('button');
-      const done = save.done[lv.id], open = levelUnlocked(save.world, i);
+      const done = P[lv.id], open = levelUnlocked(save.world, i);
       b.className = 'node' + (done ? ' done' : '') + (i === current ? ' current' : '') + (!open ? ' locked' : '') + (lv.boss ? ' boss' : '');
       b.style.left = x + '%'; b.style.top = y + '%';
       b.setAttribute('aria-label', `Level ${i + 1}: ${lv.title}${done ? `, ${done} stars` : open ? '' : ', locked'}`);
       b.innerHTML = `<span class="node-n">${open ? (lv.review ? 'R' : lv.boss ? 'B' : i + 1) : lockSvg()}</span>` +
-        (done ? `<span class="node-stars">${starRow(done, 3, 9)}</span>` : '') + ((save.hard || {})[lv.id] ? '<span class="node-crown" aria-hidden="true">H</span>' : '') +
+        (done ? `<span class="node-stars">${starRow(done, 3, 9)}</span>` : '') + (!hardMap && (save.hard || {})[lv.id] ? '<span class="node-crown" aria-hidden="true">H</span>' : '') + (lv.late && !done ? '<span class="node-new" aria-hidden="true">NEW</span>' : '') +
         `<span class="node-tip">${esc(lv.title)}</span>`;
       b.onclick = open ? () => { sfx('tap'); startLevel(save.world, i); } : () => toast('Finish the level before this one to unlock it.');
       box.appendChild(b);
@@ -656,16 +664,26 @@
     mh.classList.toggle('below', W.nodes[current][1] < 15);
     const ctx = mh.getContext('2d'); ctx.imageSmoothingEnabled = false; ctx.clearRect(0, 0, mh.width, mh.height);
     drawHero(ctx, save.hero, 0, 0, 2);
-    const allDone = W.levels.every(l => save.done[l.id]);
+    const allDone = W.levels.every(l => l.late || P[l.id]);
+    // Normal / Hard switch, once every world is beaten
     const hb = $('#btn-hard');
-    save.hardOn = save.hardOn || {};
-    hb.hidden = !allDone;
-    hb.textContent = save.hardOn[W.id] ? 'Hard mode: on' : 'Hard mode: off';
-    hb.classList.toggle('ghost', !save.hardOn[W.id]);
-    hb.onclick = () => { sfx('tap'); save.hardOn[W.id] = !save.hardOn[W.id]; persist(); toast(save.hardOn[W.id] ? 'Hard mode: typing instead of blocks, 2 hearts, new kinds of questions, more gold.' : 'Hard mode off.'); renderMap(); };
+    hb.hidden = !allBeaten();
+    hb.textContent = hardMap ? 'Worlds: Hard' : 'Worlds: Normal';
+    hb.classList.toggle('ghost', !hardMap);
+    hb.classList.toggle('hard-on', hardMap);
+    hb.onclick = () => {
+      sfx('tap');
+      save.mode = hardMap ? 'normal' : 'hard';
+      if (save.mode === 'hard' && !worldUnlocked(save.world)) save.world = 0;
+      persist();
+      toast(save.mode === 'hard' ? 'Hard worlds: type every answer and every fix yourself, fewer hearts, hints only after two misses, 1.5x XP and gold. Worlds unlock one by one again.' : 'Back to the normal worlds.');
+      renderMap();
+    };
     const nextW = WORLDS[save.world + 1];
     $('#map-banner').hidden = !allDone;
-    $('#map-banner').textContent = nextW ? `World ${W.id} cleared! World ${nextW.id}, ${/^the /i.test(nextW.name) ? nextW.name : 'the ' + nextW.name}, is open. Switch worlds above.` : `World ${W.id} cleared! More worlds are coming. Keep sharp in the Training grounds.`;
+    if (hardMap) $('#map-banner').textContent = nextW ? `Hard World ${W.id} cleared! Hard World ${nextW.id} is open.` : 'Every Hard world is cleared. You have mastered Script & Sorcery.';
+    else $('#map-banner').textContent = nextW ? `World ${W.id} cleared! World ${nextW.id}, ${/^the /i.test(nextW.name) ? nextW.name : 'the ' + nextW.name}, is open. Switch worlds above.` : `World ${W.id} cleared! More worlds are coming. Keep sharp in the Training grounds.`;
+    if (!hardMap && !nextW && allBeaten()) $('#map-banner').textContent = 'Every world is beaten! Hard worlds are open: tap "Worlds: Normal" above the map to switch.';
   }
   const ARROW_L = '<svg viewBox="0 0 6 8" width="12" height="16" aria-hidden="true" shape-rendering="crispEdges"><path fill="currentColor" d="M4 0h1v8H4V7H3V6H2V5H1V3h1V2h1V1h1z"/></svg>';
   const ARROW_R = '<svg viewBox="0 0 6 8" width="12" height="16" aria-hidden="true" shape-rendering="crispEdges"><path fill="currentColor" d="M1 0h1v1h1v1h1v1h1v2H4v1H3v1H2v1H1z"/></svg>';
@@ -980,7 +998,7 @@
 
   function startLevel(w, i, opts = {}) {
     const def = WORLDS[w].levels[i];
-    const hard = opts.hard != null ? opts.hard : !!(save.hardOn || {})[WORLDS[w].id];
+    const hard = opts.hard != null ? opts.hard : inHard();
     const hp0 = (hard ? 2 : 3) + heartBonus(heroLevel());
     L = { w, i, def, idx: -1, fails: 0, busy: false, hearts: hp0, maxHearts: hp0, hard, ward: hasWard(heroLevel()) };
     scene.bg = def.bg;
@@ -1019,6 +1037,8 @@
   }
   function setHint(hints) {
     const b = $('#btn-hint');
+    // Hard worlds: hints appear only after two misses on this step
+    if (L && L.hard && hints && hints.length && (L.stepFails || 0) < 2) { L.pendingHints = hints; hints = null; }
     if (!hints || !hints.length) { b.hidden = true; return; }
     b.hidden = false;
     L.hintIdx = 0;
@@ -1228,6 +1248,7 @@
   }
   async function onFail(msg, heal = true) {
     L.fails++; L.stepFails++;
+    if (L.hard && L.pendingHints && L.stepFails >= 2) { const h = L.pendingHints; L.pendingHints = null; setHint(h); toast('A hint is ready.'); }
     markWeak(1);
     sfx('bad');
     mentorSay(msg, 'bad');
@@ -1297,6 +1318,7 @@
     return d;
   }
   function stepPredict(st) {
+    if (st.typed) { stepTypedAnswer(st); return; }
     mentorSay(st.text);
     const which = st.format === 'whichcode';
     if (which) { $('#code').innerHTML = ''; $('#code').appendChild(wantBox(st.want)); }
@@ -1320,7 +1342,7 @@
         L.busy = true;
         const prog = which ? st.codeChoices[k] : st.code;
         if (which) renderCode(prog);
-        await playback(prog);
+        if (!st.shell) await playback(prog);
         const right = k === st.answer;
         box.children[st.answer].classList.add('right');
         if (!right) {
@@ -1338,6 +1360,35 @@
       };
       box.appendChild(b);
     });
+  }
+
+  // Hard worlds: no choices, type exactly what the spellbook will say
+  function stepTypedAnswer(st) {
+    const errQ = st.measure === 'errtype';
+    mentorSay(`${st.text} ${errQ ? 'Type the error name, or No error.' : 'Type exactly what it will say, one line per printed line.'}`);
+    renderCode(st.code);
+    const ctrl = $('#ctrl');
+    ctrl.innerHTML = '<div class="ctrl-label">Your answer</div><textarea id="typed-answer" class="typed-answer" rows="2" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" aria-label="Your answer"></textarea>';
+    const ta = $('#typed-answer');
+    ta.rows = Math.min(6, Math.max(2, (st.choices[st.answer] || '').split(' / ').length + 1));
+    setMain('Check', async () => {
+      const val = ta.value;
+      if (!val.trim()) { toast('Type your answer first.'); ta.focus(); return; }
+      L.busy = true;
+      ta.blur(); ta.readOnly = true;
+      await playback(st.code);
+      if (Engine.answerOk(st, val)) {
+        if (st.reward && scene.right && scene.right.type === 'foe') await castFx(st.reward.spell, st.reward.power);
+        L.busy = false;
+        onSuccess(`${praise()} ${st.explain}`);
+        return;
+      }
+      const fainted = await onFail(`Not quite. The answer was: ${st.choices[st.answer]}. ${st.explain}`, false);
+      L.busy = false;
+      if (fainted) return;
+      setMain('Continue', () => { sfx('tap'); next(); });
+    });
+    setTimeout(() => ta.focus(), 50);
   }
 
   /* ---- order: put the shuffled lines back ---- */
@@ -1497,7 +1548,7 @@
     });
   }
   function pickLine(st, i) {
-    if (L.busy || L.X.phase === 'done') return;
+    if (L.busy || L.X.phase === 'done' || L.X.phase === 'typing') return;
     sfx('tap');
     if (i !== st.bad) {
       L.fails++;
@@ -1505,6 +1556,7 @@
       return;
     }
     hlLine(i, 'on');
+    if (st.typedFix) { typedFixBox(st); return; }
     mentorSay(`Yes, line ${i + 1} is the problem. Which fix is right?`);
     const ctrl = $('#ctrl');
     ctrl.innerHTML = '<div class="ctrl-label">Replace the line with</div><div class="choices"></div>';
@@ -1516,6 +1568,45 @@
       b.onclick = () => tryFix(st, k, b);
       box.appendChild(b);
     });
+  }
+  function typedFixBox(st, prefill) {
+    L.X.phase = 'typing';
+    mentorSay(`Yes, line ${st.bad + 1} is the problem. Rewrite it so the spell works.`);
+    const ctrl = $('#ctrl');
+    ctrl.innerHTML = `<div class="ctrl-label">Rewrite line ${st.bad + 1}</div><input id="fix-line" class="fix-line" type="text" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" aria-label="Line ${st.bad + 1}">`;
+    const inp = $('#fix-line');
+    inp.value = prefill != null ? prefill : st.code[st.bad];
+    setMain(runLabel(), () => tryTypedFix(st));
+    inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); tryTypedFix(st); } };
+    setTimeout(() => inp.focus(), 50);
+  }
+  async function tryTypedFix(st) {
+    if (L.busy || L.X.phase === 'done') return;
+    const inp = $('#fix-line');
+    let line = inp.value.replace(/\s+$/, '');
+    if (!line.trim()) { toast('Type the fixed line first.'); return; }
+    // keep the line's indentation if it was left out
+    const indent = st.code[st.bad].match(/^ */)[0];
+    if (!/^ /.test(line)) line = indent + line;
+    L.busy = true;
+    sfx('tap');
+    const lines = st.code.slice();
+    lines[st.bad] = line;
+    renderCode(lines);
+    const res = await playback(lines);
+    if (goalMet(st, res)) {
+      L.X.phase = 'done';
+      L.busy = false;
+      onSuccess(`${praise()} ${st.explain}`);
+      return;
+    }
+    if (await onFail(res.error ? `That line crashed: ${res.error.type}. Try again.` : `That runs, but it gives ${res.output.join(' / ') || 'nothing'}. Try again.`)) return;
+    renderCode(st.code);
+    hlLine(st.bad, 'on');
+    L.busy = false;
+    const reveal = L.stepFails >= 3;
+    if (reveal) toast('The fixed line is filled in. Read it, then cast it.');
+    typedFixBox(st, reveal ? st.options[st.answer] : line);
   }
   async function tryFix(st, k, btn) {
     if (L.busy || L.X.phase === 'done') return;
@@ -1640,7 +1731,7 @@
     const def = L.def;
     const stars = L.fails === 0 ? 3 : L.fails <= 2 ? 2 : 1;
     const first = !save.done[def.id];
-    const xp = 20 + stars * 10 + (def.boss ? 50 : 0);
+    const xp = Math.round((20 + stars * 10 + (def.boss ? 50 : 0)) * (L.hard ? 1.5 : 1));
     const gold = Math.round((stars * 5 + (def.boss ? 50 : 0)) * (L.hard ? 1.5 : 1));
     save.done[def.id] = Math.max(save.done[def.id] || 0, stars);
     if (L.hard) { save.hard = save.hard || {}; save.hard[def.id] = Math.max(save.hard[def.id] || 0, stars); }
@@ -1650,7 +1741,7 @@
     sfx('win');
     Sound.music(null);
     const W = WORLDS[L.w], nextW = WORLDS[L.w + 1];
-    $('#res-title').textContent = L.i === W.levels.length - 1 ? `World ${W.id} cleared!` : def.boss ? 'Boss defeated!' : 'Level complete';
+    $('#res-title').textContent = (L.hard ? 'Hard: ' : '') + (L.i === W.levels.length - 1 ? `World ${W.id} cleared!` : def.boss ? 'Boss defeated!' : 'Level complete');
     $('#res-stars').hidden = false;
     $('#res-stars').innerHTML = starRow(stars, 3, 34);
     $('#res-stars').setAttribute('aria-label', `${stars} of 3 stars`);

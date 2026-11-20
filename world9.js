@@ -205,7 +205,7 @@ const WORLD9 = {
       learn: [{ title: 'Append mode', code: 'open("log.txt", "a")', text: 'Adds to the end of a file instead of wiping it. r reads, w writes fresh, a adds on.' }],
     },
     {
-      id: '9-7', title: 'Reading records', bg: 'archive', npc: 'scholar', mentor: 'scholar', tags: ['parse'],
+      id: '9-7', title: 'Reading records', bg: 'archive', npc: 'scholar', mentor: 'scholar', tags: ['parse', 'csvq'],
       steps: [
         { type: 'talk', who: 'scholar', text: 'Archives store records: one per line, fields separated by commas. Split each line to get the fields. This is how CSV files work.' },
         { type: 'demo', vars: R => { const [a, b] = R.sample(Engine.NAMES, 2); return { a, b, x: R.int(1, 20), y: R.int(1, 20) }; }, files: { 'heroes.csv': '$a,$x\n$b,$y\n' }, text: 'Run it.', code: ['with open("heroes.csv") as f:', '    for line in f:', '        name, level = line.strip().split(",")', '        print(name, "is level", level)'] },
@@ -235,8 +235,31 @@ const WORLD9 = {
           hints: ['for line in f: / item, price = line.strip().split(",")', 'total += int(price), then print(total) after the with block.'],
           solution: ['with open("prices.csv") as f:', '    for line in f:', '        item, price = line.strip().split(",")', '        total += int(price)', 'print(total)'],
         },
+
+        { type: 'talk', who: 'scholar', text: 'Splitting by hand breaks when a field has a comma inside quotes. The csv library handles that. csv.reader gives each row as a list. csv.DictReader uses the first line as names, so each row is a dictionary.' },
+        {
+          type: 'predict', vars: R => { const [a, b] = R.sample(Engine.NAMES, 2); return { a, b }; }, files: { 'heroes.csv': 'name,home\n$a,"Oak Hill, North"\n$b,Riverside\n' },
+          text: 'One home has a comma inside quotes. What will it say?', code: ['import csv', 'with open("heroes.csv") as f:', '    for row in csv.DictReader(f):', '        print(row["name"], "from", row["home"])'],
+          wrong: ['$a from "Oak Hill / $b from Riverside', 'name from home / $a from Oak Hill, North / $b from Riverside'],
+          explain: 'DictReader skips the header line and keeps "Oak Hill, North" together because of the quotes.',
+        },
+        {
+          type: 'predict', vars: R => { const ns = R.sample(Engine.NAMES, 3); return { ns, ps: [R.int(1, 30), R.int(1, 30), R.int(1, 30)] }; }, files: { 'scores.csv': '$(ns[0]),$(ps[0])\n$(ns[1]),$(ps[1])\n$(ns[2]),$(ps[2])\n' },
+          wrong: ['$(ns.join(" / "))', '$(ns.map((n, i) => [n, ps[i]]).sort((a, b) => a[1] - b[1]).map(x => x[0]).join(" / "))', '$(ns.slice().sort().join(" / "))'],
+          text: 'Sorting records. What will it say?', code: ['import csv', 'rows = list()', 'with open("scores.csv") as f:', '    for name, score in csv.reader(f):', '        rows.append({"name": name, "score": int(score)})', 'for r in sorted(rows, key=lambda r: r["score"], reverse=True):', '    print(r["name"])'],
+          explain: 'sorted with a key orders the records by score, highest first.',
+        },
+        {
+          type: 'write', vars: R => ({ n: R.pick(Engine.NAMES), h: R.pick(['Oslo', 'Lima', 'Cairo', 'Kyoto']) }), files: { 'guests.csv': 'name,home\n' },
+          text: 'Use csv.DictWriter with fieldnames ["name", "home"] to add one row to guests.csv: name $n, home $h. Open the file in "a" mode.',
+          starter: ['import csv'], keys: ['with', 'open', '(', ')', '"guests.csv"', '"a"', ',', 'as', 'f', ':', 'writer', '=', 'csv.DictWriter', 'fieldnames=["name", "home"]', 'writer.writerow', '{"name": "$n", "home": "$h"}'],
+          goal: { files: ['guests.csv'] },
+          require: l => (has(l, /DictWriter/) && has(l, /writerow/) ? null : 'Use csv.DictWriter and writerow.'),
+          hints: ['with open("guests.csv", "a") as f: / writer = csv.DictWriter(f, fieldnames=["name", "home"])', 'writer.writerow({"name": "$n", "home": "$h"})'],
+          solution: ['with open("guests.csv", "a") as f:', '    writer = csv.DictWriter(f, fieldnames=["name", "home"])', '    writer.writerow({"name": "$n", "home": "$h"})'],
+        },
       ],
-      learn: [{ title: 'Records (CSV)', code: 'name, level = line.strip().split(",")', text: 'One record per line, fields split by commas. Python also has a csv module that does this for you.' }],
+      learn: [{ title: 'The csv library', code: 'csv.reader(f)  csv.DictReader(f)\ncsv.DictWriter(f, fieldnames=[...])', text: 'Reads and writes records safely, even with commas inside quotes.' }, { title: 'Records (CSV)', code: 'name, level = line.strip().split(",")', text: 'One record per line, fields split by commas. Python also has a csv module that does this for you.' }],
     },
     {
       id: '9-8', title: 'The torn index', bg: 'scriptorium', mentor: 'narrator', tags: [],

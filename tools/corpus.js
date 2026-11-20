@@ -634,4 +634,122 @@ print(nums.index(4), nums.count(1), sorted(nums), nums)
 nums.sort(reverse=True)
 print(nums, nums[::2], list(enumerate(nums))[:2])
 print(sum(n for n in nums if n > 2), [n * 2 for n in nums if n % 2 == 1])`),
+  // match / case
+  P(`for cmd in ["north", "south", "dance", "w"]:
+    match cmd:
+        case "north" | "n":
+            print("up")
+        case "south":
+            print("down")
+        case "w" | "west":
+            print("left")
+        case _:
+            print("unknown", cmd)`),
+  P(`def where(point):
+    match point:
+        case [0, 0]:
+            return "origin"
+        case [x, 0]:
+            return f"x-axis {x}"
+        case [0, y]:
+            return f"y-axis {y}"
+        case [x, y] if x == y:
+            return "diagonal"
+        case [first, *rest]:
+            return f"starts {first} then {len(rest)}"
+        case _:
+            return "?"
+for p in [[0, 0], [3, 0], [0, 5], [2, 2], [1, 2, 3], [7, 8], 5]:
+    print(where(p))`),
+  P(`n = 7
+match n:
+    case 1 | 2 | 3:
+        print("small")
+    case 7 as lucky:
+        print("lucky", lucky)
+    case None:
+        print("none")
+match = 3
+print(match + 1)`),
+  P(`x = None
+match x:
+    case None:
+        print("nothing")
+    case _:
+        print("something")`),
+  // global and nonlocal
+  P(`gold = 10
+def earn(n):
+    global gold
+    gold += n
+def spend(n):
+    global gold
+    gold = gold - n
+earn(5)
+spend(3)
+print(gold)
+def peek():
+    return gold * 2
+print(peek())`),
+  P(`count = 0
+def bump():
+    count += 1
+bump()`),
+  P(`def counter():
+    n = 0
+    def tick():
+        nonlocal n
+        n += 1
+        return n
+    tick()
+    tick()
+    return tick()
+print(counter())`),
+  // argparse
+  P(`import argparse
+parser = argparse.ArgumentParser(description="Greets people")
+parser.add_argument("-n", default=1, help="number of times", type=int)
+parser.add_argument("name")
+args = parser.parse_args()
+for _ in range(args.n):
+    print("meow", args.name)
+print(args)`, { argv: ['meow.py', '-n', '3', 'Ada'] }),
+  P(`import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument("--loud", action="store_true")
+parser.add_argument("word")
+args = parser.parse_args()
+w = args.word.upper() if args.loud else args.word
+print(w, args.loud)`, { argv: ['shout.py', 'hi', '--loud'] }),
+  P(`import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument("-n", type=int, default=2)
+args = parser.parse_args(["-n", "5"])
+print(args.n * 2)`),
+  // input() and csv
+  P(`def get_int(prompt):
+    while True:
+        try:
+            return int(input(prompt))
+        except ValueError:
+            print("Not a number")
+n = get_int("Number: ")
+print(n * 2)`, { input: ['cat', '4.5', '21'] }),
+  P(`name = input("What's your name? ").strip().title()
+print(f"hello, {name}")`, { input: ['  ada lovelace '] }),
+  P(`import csv
+students = list()
+with open("students.csv") as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        students.append({"name": row["name"], "house": row["house"]})
+for s in sorted(students, key=lambda s: s["name"]):
+    print(f"{s['name']} is in {s['house']}")`, { files: { 'students.csv': 'name,house\nRon,Gryffindor\nDraco,Slytherin\nHermione,Gryffindor\n' } }),
+  P(`import csv
+with open("out.csv", "a", newline="") as f:
+    writer = csv.DictWriter(f, fieldnames=["name", "home"])
+    writer.writerow({"name": "Ada", "home": "London"})
+with open("out.csv") as f:
+    for name, home in csv.reader(f):
+        print(name, "/", home)`, { files: { 'out.csv': 'Wren,Oslo\n' } }),
 ];

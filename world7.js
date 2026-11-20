@@ -179,7 +179,7 @@ const WORLD7 = {
       learn: [{ title: 'Defaults and names', code: 'def f(x, times=2):\nf(times=3, x=1)', text: 'Defaults fill in missing values. Named arguments can go in any order.' }],
     },
     {
-      id: '7-6', title: 'Inside the circle', bg: 'study', npc: 'apprentice', mentor: 'apprentice', tags: ['scope'],
+      id: '7-6', title: 'Inside the circle', bg: 'study', npc: 'apprentice', mentor: 'apprentice', tags: ['scope', 'globalq'],
       steps: [
         { type: 'talk', who: 'apprentice', text: 'Jars made inside a function stay inside it. They are local. The world outside the function cannot see them.' },
         { type: 'demo', vars: R => ({ x: R.int(1, 99) }), text: 'Run it.', code: ['def mix():', '    secret = $x', '    print("Inside:", secret)', 'mix()', 'print("Outside: done")'] },
@@ -212,8 +212,21 @@ const WORLD7 = {
           hints: ['def bonus(points): / return points + $k', 'score = bonus(score) / print(score)'],
           solution: ['def bonus(points):', '    return points + $k', 'score = bonus(score)', 'print(score)'],
         },
+
+        { type: 'talk', who: 'apprentice', text: 'To change a jar that lives outside a function, declare it first: global gold. Without that line, gold += 1 inside the function is an UnboundLocalError. Use global rarely: passing values in and returning them is usually cleaner.' },
+        {
+          type: 'predict', vars: R => ({ g: R.int(5, 30), a: R.int(1, 9) }), text: 'What will it say?', code: ['gold = $g', 'def earn():', '    global gold', '    gold += $a', 'earn()', 'earn()', 'print(gold)'],
+          wrong: ['$g', '$(g + a)'],
+          explain: 'global lets earn change the gold outside it, twice: $g + $a + $a = $(g + 2 * a).',
+        },
+        {
+          type: 'fix', vars: R => ({ g: R.int(5, 30) }), text: 'This crashes with UnboundLocalError. Run it, then tap the line to replace.',
+          code: ['coins = $g', 'def spend():', '    pass', '    coins -= 1', 'spend()', 'print(coins)'], bad: 2,
+          options: ['    global coins', '    coins = coins', '    print(coins)'], answer: 0,
+          explain: 'global coins tells Python that coins means the jar outside the function.',
+        },
       ],
-      learn: [{ title: 'Scope', code: 'local inside, global outside', text: 'Jars created in a function are local to it. Pass values in and return them out.' }],
+      learn: [{ title: 'global', code: 'def earn():\n    global gold\n    gold += 1', text: 'Lets a function change a jar from outside it. Prefer parameters and return values.' }, { title: 'Scope', code: 'local inside, global outside', text: 'Jars created in a function are local to it. Pass values in and return them out.' }],
     },
     {
       id: '7-7', title: 'Spells that call spells', bg: 'study', npc: 'archmage', mentor: 'archmage', tags: ['compose', 'recursion'],

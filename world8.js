@@ -218,6 +218,19 @@ const WORLD8 = {
           hints: ['for d in data: / try: / total += int(d)', 'except ValueError: / pass, then print(total) after the loop.'],
           solution: ['for d in data:', '    try:', '        total += int(d)', '    except ValueError:', '        pass', 'print(total)'],
         },
+
+        { type: 'talk', who: 'narrator', text: 'This is the most famous pattern in CS50P: keep asking until the person types a real number. while True loops forever, and return escapes as soon as int() works.' },
+        {
+          type: 'predict', vars: R => ({ w: R.pick(['cat', 'ten', '4.5', 'x']), n: R.int(2, 50) }), input: ['$w', '$n'], text: 'They type "$w", then $n. What will it say?', code: ['def get_int(prompt):', '    while True:', '        try:', '            return int(input(prompt))', '        except ValueError:', '            print("Not an integer")', 'print(get_int("x: ") + 1)'],
+          wrong: ['x: $w / Not an integer / $(n + 1)', 'x: $w / x: $n / $(n + 1)'],
+          explain: '"$w" is not an integer, so it complains and asks again. $n works, and return ends the loop.',
+        },
+        {
+          type: 'fill', vars: R => ({ n: R.int(2, 50) }), input: ['oops', '$n'], text: 'Finish get_int so it never crashes on bad typing.',
+          lines: ['def get_int(prompt):', '    while True:', '        []:', '            return int(input(prompt))', '        except []:', '            pass', 'print(get_int("n: "))'],
+          chips: ['try', 'ValueError', 'TypeError', 'if'], answer: [['try', 'ValueError']],
+          hints: ['Guard the risky line with try.', 'int("oops") raises ValueError.'],
+        },
       ],
       learn: [{ title: 'Validating data', code: 'for x in data:\n    try: ...\n    except: pass', text: 'Real data is messy. Try each item and handle the bad ones.' }],
     },

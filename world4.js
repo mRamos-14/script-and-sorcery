@@ -169,6 +169,12 @@ const WORLD4 = {
           hints: ['while n > 0: then print(n) and n -= 1', 'print("Liftoff!") goes after the loop, not indented.'],
           solution: ['while n > 0:', '    print(n)', '    n -= 1', 'print("Liftoff!")'],
         },
+
+        {
+          type: 'predict', vars: R => ({ a: -R.int(1, 9), b: R.int(1, 9) }), input: ['$a', '0', '$b'], text: 'A classic: keep asking until the answer is good. The person types $a, then 0, then $b. What will it say?', code: ['n = int(input("n: "))', 'while n <= 0:', '    n = int(input("n: "))', 'print("thanks", n)'],
+          wrong: ['n: $a / thanks $a', 'n: $a / n: 0 / thanks 0'],
+          explain: 'The loop asks again while the number is not positive, so it asks three times.',
+        },
       ],
       learn: [{ title: 'while loops', code: 'while n > 0:\n    n -= 1', text: 'Repeats while the question is True. Something inside must change so it can stop.' }],
     },

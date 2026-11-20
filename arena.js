@@ -562,6 +562,35 @@ const Arena = (() => {
     pipeline: () => makeQ(['def src():', '    for i in range(1, 6):', '        yield i', 'def odd(xs):', '    for x in xs:', '        if x % 2:', '            yield x', 'print(list(odd(src())))'], ['[2, 4]', '[1, 2, 3, 4, 5]']),
   });
 
+  /* ---- CS50P extras: input, match, global, csv, argparse ---- */
+  Object.assign(GEN, {
+    inputq: () => {
+      const a = rnd(2, 20), b = rnd(2, 20), v = rnd(0, 1);
+      if (v === 0) return makeQ(['x = input("x: ")', 'y = input("y: ")', 'print(x + y)'], [`x: ${a}\ny: ${b}\n${a + b}`, `${a + b}`], `Someone types ${a}, then ${b}. What will it say?`, { input: [String(a), String(b)] });
+      return makeQ(['n = int(input("n: "))', 'print(n * 2)'], [`n: ${a}\n${a}${a}`, `${a * 2}`], `Someone types ${a}. What will it say?`, { input: [String(a)] });
+    },
+    matchq: () => {
+      const w = pick(['n', 'north', 'south', 'up', 'w']);
+      return makeQ(['way = "' + w + '"', 'match way:', '    case "north" | "n":', '        print("hill")', '    case "south":', '        print("river")', '    case _:', '        print("stay")'], ['hill', 'river', 'stay', 'Error']);
+    },
+    globalq: () => {
+      const g = rnd(2, 20), a = rnd(1, 9);
+      return rand() < 0.6
+        ? makeQ([`gold = ${g}`, 'def earn():', '    global gold', `    gold += ${a}`, 'earn()', 'print(gold)'], [g, `${g}${a}`, 'Error'])
+        : makeQ([`gold = ${g}`, 'def earn():', `    gold += ${a}`, 'earn()', 'print(gold)'], [g + a, g]);
+    },
+    csvq: () => {
+      const [a, b] = shuffle(NAMES).slice(0, 2);
+      return makeQ(['import csv', 'with open("h.csv") as f:', '    for row in csv.DictReader(f):', '        print(row["name"])'], [`name\n${a}\n${b}`, `${a},Oak\n${b},Elm`], 'h.csv is on the shelf. What will it say?', { files: { 'h.csv': `name,home\n${a},"Oak, North"\n${b},Elm\n` } });
+    },
+    argparseq: () => {
+      const n = rnd(2, 4);
+      return rand() < 0.5
+        ? makeQ(['import argparse', 'p = argparse.ArgumentParser()', 'p.add_argument("-n", type=int, default=1)', 'args = p.parse_args()', 'print("hi" * args.n)'], ['hi', `hi${n}`, 'Error'], `Typed: python hi.py -n ${n}. What will it say?`, { argv: ['hi.py', '-n', String(n)] })
+        : makeQ(['import argparse', 'p = argparse.ArgumentParser()', 'p.add_argument("-n", type=int, default=1)', 'args = p.parse_args()', 'print("hi" * args.n)'], ['hihi', 'Error', ''], 'Typed: python hi.py. What will it say?', { argv: ['hi.py'] });
+    },
+  });
+
   function range(a, b) { const out = []; for (let i = a; i < b; i++) out.push(i); return out; }
   function nums3() { return [rnd(1, 9), rnd(1, 9), rnd(1, 9)].join(', '); }
   function pyl(a) { return '[' + a.map(x => `"${x}"`).join(', ') + ']'; }

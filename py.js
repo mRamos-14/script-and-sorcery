@@ -32,7 +32,7 @@ const Py = (() => {
   const EXC_PARENT = { Exception: 'BaseException', SystemExit: 'BaseException', ZeroDivisionError: 'ArithmeticError', OverflowError: 'ArithmeticError', IndexError: 'LookupError', KeyError: 'LookupError', RecursionError: 'RuntimeError', NotImplementedError: 'RuntimeError', UnboundLocalError: 'NameError', FileNotFoundError: 'OSError', UnsupportedOperation: 'OSError', ModuleNotFoundError: 'ImportError', JSONDecodeError: 'ValueError', StatisticsError: 'ValueError', Failed: 'BaseException', ConnectionError: 'OSError' };
   const excParent = c => (c === 'BaseException' ? null : EXC_PARENT[c] || 'Exception');
   const KEYWORDS = ['if', 'elif', 'else', 'and', 'or', 'not', 'in', 'is', 'True', 'False', 'None', 'for', 'while', 'def', 'return', 'class', 'import', 'from', 'pass', 'break', 'continue', 'lambda', 'with', 'try', 'except', 'finally', 'raise', 'del', 'as', 'global', 'nonlocal', 'yield', 'assert'];
-  const LATER = ['global', 'nonlocal'];
+  const LATER = [];
   const STR_METHODS = ['upper', 'lower', 'title', 'capitalize', 'strip', 'lstrip', 'rstrip', 'replace', 'count', 'find', 'rfind', 'index', 'startswith', 'endswith', 'isdigit', 'isalpha', 'isalnum', 'isupper', 'islower', 'isspace', 'isnumeric', 'split', 'rsplit', 'join', 'splitlines', 'center', 'ljust', 'rjust', 'zfill', 'removeprefix', 'removesuffix', 'partition', 'swapcase', 'casefold', 'format'];
   const FILE_METHODS = ['read', 'readline', 'readlines', 'write', 'close'];
   const LIST_METHODS = ['append', 'extend', 'insert', 'pop', 'remove', 'index', 'count', 'sort', 'reverse', 'clear', 'copy'];
@@ -128,7 +128,7 @@ const Py = (() => {
       case 'NotImplementedType': return 'NotImplemented';
       case 'super': return `<super: <class '${x.cls.name}'>, <${typeName(x.self)} object>>`;
       case 'classmethod': case 'staticmethod': return `<${x.t} object${ADDR}>`;
-      case 'object': return `<${x.kind} object${ADDR}>`;
+      case 'object': return x.repr ? x.repr() : `<${x.kind} object${ADDR}>`;
       default:
         if (['list', 'tuple', 'dict', 'set', 'dict_keys', 'dict_values', 'dict_items', 'file', 'match'].includes(x.t)) return repr(x);
         return `<${typeName(x)} object${ADDR}>`;
@@ -604,6 +604,13 @@ const Py = (() => {
             return { n: 'fromimport', mod, names };
           }
           default:
+            if (t0.v === 'global' || t0.v === 'nonlocal') {
+              p++;
+              const names = [];
+              for (;;) { const t = toks[p++]; if (!t || t.k !== 'name') fail(); names.push(t.v); if (!isOp(',')) break; p++; }
+              if (p < toks.length) fail();
+              return { n: t0.v, names };
+            }
             if (LATER.includes(t0.v)) later(t0.v);
         }
       }
@@ -727,8 +734,61 @@ const Py = (() => {
         }
       }
     }
+    // case patterns: literals, _, names that capture, a | b, [a, *rest], dotted constants, "as"
+    function pattern() {
+      const alts = [closedPattern()];
+      while (isOp('|')) { p++; alts.push(closedPattern()); }
+      let pat = alts.length === 1 ? alts[0] : { k: 'or', alts };
+      if (isKw('as')) { p++; const t = toks[p++]; if (!t || t.k !== 'name') fail(); pat = { k: 'as', pat, name: t.v }; }
+      return pat;
+    }
+    function closedPattern() {
+      const t = at();
+      if (!t) fail();
+      if (t.k === 'num' || t.k === 'str' || (t.k === 'op' && t.v === '-')) { const e = unary(); return { k: 'lit', e }; }
+      if (t.k === 'kw' && ['None', 'True', 'False'].includes(t.v)) { p++; return { k: 'lit', e: { n: 'lit', val: t.v === 'None' ? V.none : V.bool(t.v === 'True') } }; }
+      if (t.k === 'name') {
+        p++;
+        if (isOp('.')) { let e = { n: 'name', name: t.v }; while (isOp('.')) { p++; const u = toks[p++]; if (!u || u.k !== 'name') fail(); e = { n: 'attr', obj: e, name: u.v }; } return { k: 'value', e }; }
+        if (isOp('(')) throw new PyError('SyntaxError', 'class patterns like Point(x=1) are real Python, but this spellbook does not know them yet', line);
+        return t.v === '_' ? { k: 'wild' } : { k: 'capture', name: t.v };
+      }
+      if (t.k === 'op' && (t.v === '[' || t.v === '(')) {
+        p++;
+        const close = t.v === '[' ? ']' : ')';
+        const items = [];
+        while (!isOp(close)) {
+          if (isOp('*')) { p++; const u = toks[p++]; if (!u || u.k !== 'name') fail(); items.push({ k: 'star', name: u.v === '_' ? null : u.v }); }
+          else items.push(pattern());
+          if (!isOp(',')) break;
+          p++;
+        }
+        if (!isOp(close)) fail();
+        p++;
+        return { k: 'seq', items };
+      }
+      if (t.k === 'op' && t.v === '{') throw new PyError('SyntaxError', 'mapping patterns are real Python, but this spellbook does not know them yet', line);
+      fail();
+    }
     function statement() {
       const t0 = toks[0];
+      const last = toks[toks.length - 1];
+      const softHeader = last && last.k === 'op' && last.v === ':' && toks.length > 2 && !(toks[1].k === 'op' && ['=', '.', '(', '[', ',', ':='].includes(toks[1].v) && !(toks[1].v === '(' || toks[1].v === '['));
+      if (t0 && t0.k === 'name' && t0.v === 'match' && softHeader && !toks.some((t, i) => i > 0 && t.k === 'op' && t.v === '=')) {
+        p = 1;
+        const e = exprList();
+        if (!isOp(':') || p !== toks.length - 1) fail();
+        return { n: 'match', e };
+      }
+      if (t0 && t0.k === 'name' && t0.v === 'case' && softHeader) {
+        p = 1;
+        const pat = pattern();
+        let guard = null;
+        if (isKw('if')) { p++; guard = expr(); }
+        if (!isOp(':')) fail("expected ':'");
+        p++;
+        return { n: 'case', pat, guard, inline: p < toks.length ? toks.slice(p) : null };
+      }
       if (t0 && t0.k === 'op' && t0.v === '@') { p = 1; const e = expr(); if (p < toks.length) fail(); return { n: 'decorator', e }; }
       if (t0 && t0.k === 'kw' && ['if', 'elif', 'else', 'while', 'for', 'def', 'class', 'try', 'except', 'finally', 'with'].includes(t0.v)) return header();
       return simple();
@@ -901,6 +961,7 @@ const Py = (() => {
       if ((s.n === 'break' || s.n === 'continue') && !ctx.loop) throw synErr(`'${s.n}' ${s.n === 'continue' ? 'not properly in loop' : 'outside loop'}`, ln);
       if (s.n === 'return' && !ctx.fn) throw synErr("'return' outside function", ln);
       if (s.n === 'yield') { if (!ctx.fn) throw synErr("'yield' outside function", ln); ctx.gen.yes = true; }
+      if (s.n === 'nonlocal' && !ctx.fn) throw synErr('nonlocal declaration not allowed at module level', ln);
     }
     function block(indent, ctx) {
       const out = [];
@@ -936,12 +997,29 @@ const Py = (() => {
         } else if (st.n === 'with') {
           const body = bodyOf(st, it, ctx);
           out.push({ n: 'with', items: st.items, e: st.e, as: st.as, line: it.i, body });
+        } else if (st.n === 'match') {
+          const nx0 = items[pos];
+          if (!nx0 || nx0.indent <= it.indent) throw new PyError('IndentationError', `expected an indented block after 'match' statement on line ${it.i + 1}`, nx0 ? nx0.i : it.i);
+          const cind = nx0.indent, cases = [];
+          while (pos < items.length && items[pos].indent === cind) {
+            const cit = items[pos], cst = parse(cit);
+            if (cst.n !== 'case') throw synErr('invalid syntax', cit.i);
+            pos++;
+            cases.push({ pat: cst.pat, guard: cst.guard, line: cit.i, body: bodyOf(cst, cit, ctx) });
+          }
+          if (pos < items.length && items[pos].indent > it.indent && items[pos].indent !== cind) throw new PyError('IndentationError', 'unindent does not match any outer indentation level', items[pos].i);
+          out.push({ n: 'match', e: st.e, cases, line: it.i });
+        } else if (st.n === 'case') {
+          throw synErr('invalid syntax', it.i);
         } else if (st.n === 'def') {
           const gen = { yes: false };
           const body = bodyOf(st, it, { loop: false, fn: true, gen });
           const locals = new Set(st.params.filter(q => q.name).map(q => q.name));
           collectAssigned(body, locals);
-          out.push({ n: 'def', name: st.name, params: st.params, body, locals, isGen: gen.yes, decos, line: it.i });
+          const globalNames = new Set(), nonlocalNames = new Set();
+          collectDeclared(body, globalNames, nonlocalNames);
+          for (const n of [...globalNames, ...nonlocalNames]) locals.delete(n);
+          out.push({ n: 'def', name: st.name, params: st.params, body, locals, globalNames, nonlocalNames, isGen: gen.yes, decos, line: it.i });
           decos = [];
         } else if (st.n === 'class') {
           const body = bodyOf(st, it, { loop: false, fn: false, gen: { yes: false }, cls: true });
@@ -968,6 +1046,21 @@ const Py = (() => {
       if (decos.length) throw synErr('invalid syntax', decos[decos.length - 1].line);
       return out;
     }
+    function patNames(pt, set) {
+      if (!pt) return;
+      if (pt.k === 'capture') set.add(pt.name);
+      else if (pt.k === 'as') { set.add(pt.name); patNames(pt.pat, set); }
+      else if (pt.k === 'or') pt.alts.forEach(a => patNames(a, set));
+      else if (pt.k === 'seq') pt.items.forEach(a => (a.k === 'star' ? a.name && set.add(a.name) : patNames(a, set)));
+    }
+    function collectDeclared(stmts, g, nl) {
+      for (const s of stmts) {
+        if (s.n === 'global') s.names.forEach(n => g.add(n));
+        else if (s.n === 'nonlocal') s.names.forEach(n => nl.add(n));
+        else if (s.n === 'def' || s.n === 'class') continue;
+        for (const b of [s.body, s.orelse, s.fin, ...(s.branches || []).map(x => x.body), ...(s.handlers || []).map(x => x.body), ...(s.cases || []).map(x => x.body)]) if (b) collectDeclared(b, g, nl);
+      }
+    }
     function collectAssigned(stmts, set) {
       const addT = t => { if (t.n === 'name') set.add(t.name); else if (t.n === 'tuple') t.items.forEach(addT); else if (t.n === 'star') addT(t.e); };
       for (const s of stmts) {
@@ -975,6 +1068,7 @@ const Py = (() => {
         else if (s.n === 'aug') addT(s.target);
         else if (s.n === 'for') { addT(s.target); collectAssigned(s.body, set); if (s.orelse) collectAssigned(s.orelse, set); }
         else if (s.n === 'def' || s.n === 'class') set.add(s.name);
+        else if (s.n === 'match') for (const c of s.cases) { patNames(c.pat, set); collectAssigned(c.body, set); }
         else if (s.n === 'import') s.names.forEach(x => set.add(x.as || x.mod.split('.')[0]));
         else if (s.n === 'fromimport') s.names.forEach(x => set.add(x.as || x.name));
         else if (s.n === 'if') { s.branches.forEach(b => collectAssigned(b.body, set)); if (s.orelse) collectAssigned(s.orelse, set); }
@@ -1549,6 +1643,8 @@ const Py = (() => {
   }
   const safeShow = x => { SAFE++; try { return show(x); } finally { SAFE--; } };
   function lookup(name, scope) {
+    if (scope.globalNames && scope.globalNames.has(name)) return lookup(name, globalOf(scope));
+    if (scope.nonlocalNames && scope.nonlocalNames.has(name)) return lookup(name, scope.parent);
     if (Object.prototype.hasOwnProperty.call(scope.vars, name)) return scope.vars[name];
     if (scope.fn && scope.locals.has(name)) throw new PyError('UnboundLocalError', `cannot access local variable '${name}' where it is not associated with a value`);
     if (scope.parent) return lookup(name, scope.parent);
@@ -2068,7 +2164,7 @@ const Py = (() => {
   }
 
   function callFunction(fn, args, kw, ctx) {
-    const scope = { vars: {}, parent: fn.closure, fn: true, locals: fn.locals, fnObj: fn };
+    const scope = { vars: {}, parent: fn.closure, fn: true, locals: fn.locals, fnObj: fn, globalNames: fn.globalNames, nonlocalNames: fn.nonlocalNames };
     const ps = fn.params;
     const pos = ps.filter(q => q.kind === 'pos');
     const va = ps.find(q => q.kind === 'varargs'), kwa = ps.find(q => q.kind === 'kwargs');
@@ -2120,7 +2216,7 @@ const Py = (() => {
     if (s._y !== undefined) return s._y;
     let y = s.n === 'yield';
     if (!y && s.n !== 'def' && s.n !== 'class') {
-      const kids = [s.body, s.orelse, s.fin, ...(s.branches || []).map(b => b.body), ...(s.handlers || []).map(h => h.body)].filter(Boolean);
+      const kids = [s.body, s.orelse, s.fin, ...(s.branches || []).map(b => b.body), ...(s.handlers || []).map(h => h.body), ...(s.cases || []).map(c => c.body)].filter(Boolean);
       y = kids.some(b => b.some(hasYield));
     }
     s._y = y;
@@ -2492,10 +2588,19 @@ const Py = (() => {
 
   // names that are spell words in this game: assigning to them is blocked
   const RESERVED = ['print', 'str', 'int', 'float', 'bool', 'len', 'cast', 'range', 'sum', 'max', 'min', 'sorted', 'abs', 'round', 'list', 'type', 'enumerate', 'open'];
+  // where an assignment to this name goes: the function, the whole spell (global), or an outer function (nonlocal)
+  function homeOf(name, scope) {
+    if (scope.globalNames && scope.globalNames.has(name)) return globalOf(scope);
+    if (scope.nonlocalNames && scope.nonlocalNames.has(name)) {
+      for (let s = scope.parent; s && s.fn; s = s.parent) if (Object.prototype.hasOwnProperty.call(s.vars, name) || (s.locals && s.locals.has(name))) return s;
+      throw new PyError('SyntaxError', `no binding for nonlocal '${name}' found`);
+    }
+    return scope;
+  }
   function bindTarget(t, val, scope, ctx) {
     if (t.n === 'name') {
       if (RESERVED.includes(t.name) || SPELLS.includes(t.name)) throw new PyError('SyntaxError', `"${t.name}" is a spell word in this game, pick another name`);
-      scope.vars[t.name] = val;
+      homeOf(t.name, scope).vars[t.name] = val;
       return t.name;
     }
     if (t.n === 'tuple') {
@@ -2730,7 +2835,7 @@ const Py = (() => {
       case 'continue': throw new Signal('continue');
       case 'def': {
         const doc = s.body[0] && s.body[0].n === 'expr' && s.body[0].e.n === 'lit' && s.body[0].e.val.t === 'str' ? s.body[0].e.val.v : null;
-        let f = makeFunction(s.name, s.params, s.body, scope, ctx, { locals: s.locals, isGen: s.isGen, line: s.line, doc });
+        let f = makeFunction(s.name, s.params, s.body, scope, ctx, { globalNames: s.globalNames, nonlocalNames: s.nonlocalNames, locals: s.locals, isGen: s.isGen, line: s.line, doc });
         for (const d of s.decos.slice().reverse()) { ctx.emit = emitAt(d.line); f = callValue(evalE(d.e, scope, ctx), [f], {}, ctx); }
         bindName(scope, s.name, f);
         ctx.trace.push({ kind: 'step', line: s.line, env: snapshot(scope) });
@@ -2752,6 +2857,23 @@ const Py = (() => {
         throw new Signal('return', val);
       }
       case 'yield': throw new PyError('SyntaxError', "'yield' outside function");
+      case 'global': case 'nonlocal': ctx.trace.push({ kind: 'step', line: s.line, env: snapshot(scope) }); return;
+      case 'match': {
+        ctx.emit = emitAt(s.line);
+        const subj = evalE(s.e, scope, ctx);
+        for (const c of s.cases) {
+          ctx.emit = emitAt(c.line);
+          const binds = {};
+          let ok = matchPattern(c.pat, subj, binds, scope, ctx);
+          if (ok) {
+            for (const k in binds) bindTarget({ n: 'name', name: k }, binds[k], scope, ctx);
+            if (c.guard) ok = truthy(evalE(c.guard, scope, ctx));
+          }
+          ctx.trace.push({ kind: 'cond', line: c.line, value: ok, label: ok ? 'matches' : 'no match' });
+          if (ok) { execBlock(c.body, scope, ctx); return; }
+        }
+        return;
+      }
       case 'with': {
         const mgrs = enterWith(s, scope, ctx);
         let err = null;
@@ -2820,6 +2942,28 @@ const Py = (() => {
         return;
       }
     }
+  }
+  function matchPattern(pt, v, binds, scope, ctx) {
+    switch (pt.k) {
+      case 'wild': return true;
+      case 'capture': binds[pt.name] = v; return true;
+      case 'lit': { const want = evalE(pt.e, scope, ctx); return (want.t === 'NoneType' || want.t === 'bool') ? identical(v, want) : equal(v, want); }
+      case 'value': return equal(v, evalE(pt.e, scope, ctx));
+      case 'as': if (!matchPattern(pt.pat, v, binds, scope, ctx)) return false; binds[pt.name] = v; return true;
+      case 'or': for (const a of pt.alts) { const b = {}; if (matchPattern(a, v, b, scope, ctx)) { Object.assign(binds, b); return true; } } return false;
+      case 'seq': {
+        if (!(v.t === 'list' || v.t === 'tuple')) return false;
+        const items = v.v, si = pt.items.findIndex(x => x.k === 'star');
+        if (si < 0) { if (items.length !== pt.items.length) return false; return pt.items.every((p2, i) => matchPattern(p2, items[i], binds, scope, ctx)); }
+        const after = pt.items.length - si - 1;
+        if (items.length < pt.items.length - 1) return false;
+        for (let i = 0; i < si; i++) if (!matchPattern(pt.items[i], items[i], binds, scope, ctx)) return false;
+        for (let i = 0; i < after; i++) if (!matchPattern(pt.items[si + 1 + i], items[items.length - after + i], binds, scope, ctx)) return false;
+        if (pt.items[si].name) binds[pt.items[si].name] = V.list(items.slice(si, items.length - after));
+        return true;
+      }
+    }
+    return false;
   }
   function bindName(scope, name, v) {
     if (RESERVED.includes(name) || SPELLS.includes(name)) throw new PyError('SyntaxError', `"${name}" is a spell word in this game, pick another name`);
@@ -3313,7 +3457,72 @@ const Py = (() => {
     });
   }
   const STRING_MOD = () => mkModule('string', { ascii_letters: V.str('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'), ascii_lowercase: V.str('abcdefghijklmnopqrstuvwxyz'), ascii_uppercase: V.str('ABCDEFGHIJKLMNOPQRSTUVWXYZ'), digits: V.str('0123456789'), punctuation: V.str('!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~') });
-  const MODULES = { random: makeRandom, math: makeMath, statistics: makeStatistics, json: makeJson, csv: makeCsv, sys: makeSys, re: makeRe, pytest: makePytest, requests: makeRequests, string: STRING_MOD };
+  // argparse: named options from the command line (the words in sys.argv)
+  function makeArgparse(ctx) {
+    const exit = (ctx2, text, code) => { const e = new PyError('SystemExit', text); e.exitArg = text ? V.str(text) : V.int(code); e.obj = { t: 'exception', cls: 'SystemExit', msg: text, args: [] }; throw e; };
+    const Parser = nat('ArgumentParser', (args, kw) => {
+      const prog = kw.prog ? fmt(kw.prog) : (ctx.argv && ctx.argv[0] ? String(ctx.argv[0]).split(/[\\/]/).pop() : 'spell.py');
+      const desc = kw.description && kw.description.t === 'str' ? kw.description.v : '';
+      const opts = [], pos = [];
+      const usage = () => `usage: ${prog} [-h]` + opts.map(o => (o.flag ? ` [${o.names[0]}]` : ` [${o.names[0]} ${o.dest.toUpperCase()}]`)).join('') + pos.map(o => ' ' + o.dest).join('');
+      const fail = msg => exit(ctx, `${usage()}\n${prog}: error: ${msg}`, 2);
+      const convert = (o, text) => {
+        if (!o.type) return V.str(text);
+        try { return callValue(o.type, [V.str(text)], {}, ctx); }
+        catch (e) { if (e instanceof PyError) fail(`argument ${o.names.join('/')}: invalid ${o.type.v || 'value'} value: '${text}'`); throw e; }
+      };
+      const parser = mkObj('ArgumentParser', {});
+      parser.attrs.set('add_argument', nat('add_argument', (names, kw2) => {
+        const ns = names.map(n => fmt(n));
+        if (!ns.length) throw new PyError('TypeError', 'add_argument() needs a name, like "-n" or "name"');
+        const optional = ns[0].startsWith('-');
+        const long = ns.find(n => n.startsWith('--'));
+        const dest = kw2.dest ? fmt(kw2.dest) : (optional ? (long || ns[0]).replace(/^-+/, '') : ns[0]).replace(/-/g, '_');
+        const o = { names: ns, dest, type: kw2.type, def: kw2.default || (kw2.action && fmt(kw2.action) === 'store_true' ? V.bool(false) : V.none), help: kw2.help ? fmt(kw2.help) : '', flag: kw2.action && fmt(kw2.action) === 'store_true', required: kw2.required && truthy(kw2.required), choices: kw2.choices ? iterate(kw2.choices) : null };
+        (optional ? opts : pos).push(o);
+        return V.none;
+      }));
+      parser.attrs.set('parse_args', nat('parse_args', ([given]) => {
+        const words = given && given.t !== 'NoneType' ? iterate(given).map(fmt) : (ctx.argv || ['spell.py']).slice(1).map(String);
+        const vals = new Map();
+        for (const o of opts) vals.set(o.dest, o.def);
+        const left = [];
+        for (let i = 0; i < words.length; i++) {
+          const w = words[i];
+          if (w === '-h' || w === '--help') {
+            const lines = [usage(), ''];
+            if (desc) lines.push(desc, '');
+            if (pos.length) { lines.push('positional arguments:'); for (const o of pos) lines.push(`  ${o.dest.padEnd(12)}${o.help}`.trimEnd()); lines.push(''); }
+            lines.push('options:', '  -h, --help  show this help message and exit');
+            for (const o of opts) lines.push(`  ${(o.flag ? o.names.join(', ') : o.names.map(n => `${n} ${o.dest.toUpperCase()}`).join(', ')).padEnd(12)}${o.help}`.trimEnd());
+            for (const l of lines) ctx.emit({ kind: 'print', text: l, raw: l + '\n' });
+            exit(ctx, '', 0);
+          }
+          if (w.startsWith('-') && !/^-\d/.test(w)) {
+            const o = opts.find(x => x.names.includes(w));
+            if (!o) fail(`unrecognized arguments: ${w}`);
+            if (o.flag) { vals.set(o.dest, V.bool(true)); continue; }
+            if (i + 1 >= words.length) fail(`argument ${o.names.join('/')}: expected one argument`);
+            const v = convert(o, words[++i]);
+            if (o.choices && !o.choices.some(c => equal(c, v))) fail(`argument ${o.names.join('/')}: invalid choice: ${repr(v)}`);
+            vals.set(o.dest, v);
+          } else left.push(w);
+        }
+        const missing = pos.slice(left.length).map(o => o.dest);
+        if (missing.length) fail(`the following arguments are required: ${missing.join(', ')}`);
+        if (left.length > pos.length) fail(`unrecognized arguments: ${left.slice(pos.length).join(' ')}`);
+        pos.forEach((o, i) => vals.set(o.dest, convert(o, left[i])));
+        for (const o of opts) if (o.required && !words.some(w => o.names.includes(w))) fail(`the following arguments are required: ${o.names.join('/')}`);
+        const ns = mkObj('Namespace', {});
+        for (const [k, v] of vals) ns.attrs.set(k, v);
+        ns.repr = () => `Namespace(${[...ns.attrs].map(([k, v]) => `${k}=${repr(v)}`).join(', ')})`;
+        return ns;
+      }));
+      return parser;
+    });
+    return mkModule('argparse', { ArgumentParser: Parser });
+  }
+  const MODULES = { argparse: makeArgparse, random: makeRandom, math: makeMath, statistics: makeStatistics, json: makeJson, csv: makeCsv, sys: makeSys, re: makeRe, pytest: makePytest, requests: makeRequests, string: STRING_MOD };
   function loadModule(name, ctx) {
     if (ctx.modules[name]) return ctx.modules[name];
     if (ctx.userModules && ctx.userModules[name]) return (ctx.modules[name] = runUserModule(name, ctx));

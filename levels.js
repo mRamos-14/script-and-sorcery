@@ -102,7 +102,7 @@ const WORLD1 = {
       ],
     },
     {
-      id: '1-3', title: 'Labeled jars', bg: 'village', npc: 'elder', mentor: 'elder', tags: ['vars'],
+      id: '1-3', title: 'Labeled jars', bg: 'village', npc: 'elder', mentor: 'elder', tags: ['vars', 'inputq'],
       steps: [
         { type: 'talk', who: 'elder', text: 'Spells get messy if you repeat values everywhere. Wise mages store them in variables.' },
         { type: 'talk', who: 'elder', text: 'A variable is like a labeled jar. Write a name, then =, then the value to put inside. Watch the jars appear under the spell.' },
@@ -144,8 +144,23 @@ const WORLD1 = {
           hints: ['Two lines: first fill the jar, then print it.', '$j = $n on line 1, print($j) on line 2.'],
           solution: ['$j = $n', 'print($j)'],
         },
+
+        { type: 'talk', who: 'elder', text: 'Real programs talk to people. input("question") shows the question, waits for the person to type, and gives back what they typed. In this spellbook, the typed answer appears right after the question.' },
+        { type: 'demo', vars: R => ({ n: R.pick(Engine.NAMES) }), input: ['$n'], text: 'Run it. Someone types $n.', code: ['name = input("What is your name? ")', 'print("Hello,", name)'] },
+        {
+          type: 'predict', vars: R => ({ n: R.int(2, 9) }), input: ['$n'], text: 'Someone types $n. What will it say?', code: ['x = input("Number: ")', 'print(x + x)'],
+          wrong: ['Number: $n / $(2 * n)', '$(2 * n)'],
+          explain: 'input always gives back text, so + glues "$n" to "$n".',
+        },
+        {
+          type: 'write', vars: R => ({ n: R.pick(Engine.NAMES) }), input: ['$n'], text: 'Ask "Who are you? " with input and keep the answer in name. Then print "Welcome," and the name. Someone will type $n.',
+          starter: [], keys: ['name', '=', 'input', '(', ')', '"Who are you? "', 'print', '"Welcome,"', ','],
+          require: l => (has(l, /input\(/) ? null : 'Use input( ) to ask the question.'),
+          hints: ['name = input("Who are you? ")', 'print("Welcome,", name)'],
+          solution: ['name = input("Who are you? ")', 'print("Welcome,", name)'],
+        },
       ],
-      learn: [
+      learn: [{ title: 'input()', code: 'name = input("Name? ")', text: 'Asks a question and gives back what the person typed, always as a string.' }, 
         { title: 'Variables', code: 'gold = 10', text: 'A named jar that holds a value. Use the name without quotes to get the value back.' },
         { title: 'Case matters', code: 'herbs ≠ Herbs', text: 'Python treats upper and lower case letters as different names.' },
       ],
@@ -317,6 +332,19 @@ const WORLD1 = {
           hints: ['"Level: " + str(level) works. So does "Level:", level', 'print("Level: " + str(level))'],
           solution: ['print("Level: " + str(level))'],
         },
+
+        {
+          type: 'predict', vars: R => ({ a: R.int(2, 20), b: R.int(2, 20) }), input: ['$a', '$b'], text: 'Someone types $a, then $b. What will it say?', code: ['x = int(input("x: "))', 'y = int(input("y: "))', 'print(x + y)'],
+          wrong: ['x: $a / y: $b / $a$b'],
+          explain: 'int() turns each typed answer into a number, so they really add up: $(a + b).',
+        },
+        {
+          type: 'write', vars: R => ({ p: R.int(2, 30) }), input: ['$p'], text: 'Ask "Price: " with input, turn the answer into a number with int(), and print double the price. Someone types $p.',
+          starter: [], keys: ['price', '=', 'int', 'input', '(', ')', '"Price: "', 'print', '*', '2'],
+          require: l => (has(l, /int\(\s*input\(/) ? null : 'Wrap input( ) inside int( ).'),
+          hints: ['price = int(input("Price: "))', 'print(price * 2)'],
+          solution: ['price = int(input("Price: "))', 'print(price * 2)'],
+        },
       ],
       learn: [
         { title: 'Types', code: '"50" vs 50', text: '"50" is a str (text). 50 is an int (number). They behave differently.' },
@@ -487,6 +515,12 @@ const WORLD2 = {
           require: l => (has(l, /upper\(\)/) ? null : 'Use the upper() method.'),
           hints: ['Put .upper() right after the jar name.', 'print(name.upper())'],
           solution: ['print(name.upper())'],
+        },
+
+        {
+          type: 'predict', vars: R => ({ n: R.pick(['ada lovelace', 'grace hopper', 'alan turing', 'katherine johnson']) }), input: ['  $n  '], text: 'Someone types "  $n  " with extra spaces. What will it say?', code: ['name = input("Name: ").strip().title()', 'print(f"hello, {name}")'],
+          wrong: ['Name:   $n   / hello, $n', 'Name:   $n   / hello,   $n  '],
+          explain: 'strip() removes the spaces around the answer, then title() capitalizes each word.',
         },
       ],
       learn: [

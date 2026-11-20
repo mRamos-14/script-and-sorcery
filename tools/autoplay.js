@@ -19,7 +19,8 @@ window.playLevel = async function (id) {
     if (st.type === 'talk') { main().click(); await sleep(20); continue; }
     if (st.type === 'demo') { main().click(); await waitCont(); log.push(`${k} demo: ${outs()}`); main().click(); continue; }
     if (st.type === 'predict') {
-      document.querySelectorAll('.choice')[st.answer].click();
+      if (st.typed) { document.querySelector('#typed-answer').value = st.choices[st.answer]; main().click(); }
+      else document.querySelectorAll('.choice')[st.answer].click();
       await waitCont();
       log.push(`${k} predict${st.format ? "[" + st.format + "]" : ""} ${document.querySelector('#talk').dataset.tone} [${st.choices.join(' | ').slice(0, 90)}]${st.reward ? ' hp=' + document.querySelector('#foe-hp').textContent : ''}`);
       main().click(); continue;
@@ -41,7 +42,8 @@ window.playLevel = async function (id) {
       for (let t = 0; t < 600 && main().textContent !== 'Tap a line'; t++) await sleep(100);
       document.querySelectorAll('#code .ln')[st.bad].click();
       await sleep(50);
-      document.querySelectorAll('.choice')[st.answer].click();
+      if (st.typedFix) { document.querySelector('#fix-line').value = st.options[st.answer]; main().click(); }
+      else document.querySelectorAll('.choice')[st.answer].click();
       const ok = await waitCont();
       log.push(`${k} fix ok=${ok}${ok ? '' : ' ' + document.querySelector('#talk-text').textContent.slice(0, 90)}`);
       if (!ok) return log;

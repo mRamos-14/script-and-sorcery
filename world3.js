@@ -10,7 +10,7 @@ const WISP_RESIST = { fire: 'fireball', ice: 'icebolt', water: 'fireball' };
 
 const WORLD3 = {
   id: 3, name: 'Crossroads Forest', topic: 'if, elif and else', map: 'bg-map3.jpg',
-  nodes: [[50, 93], [24, 84], [70, 76], [36, 67], [72, 58], [30, 49], [68, 40], [38, 30], [62, 20], [50, 8]],
+  nodes: [[50, 94], [26, 86], [70, 78], [34, 70], [70, 62], [30, 54], [68, 46], [32, 37], [66, 28], [38, 18], [50, 7]],
   levels: [
     {
       id: '3-1', title: 'True or false', bg: 'crossroads', npc: 'ranger', mentor: 'ranger', tags: ['compare'],
@@ -136,6 +136,11 @@ const WORLD3 = {
           hints: ['Four lines: if, indented print, else:, indented print.', 'if mana >= $need: / print("Cast!") / else: / print("Rest")'],
           solution: ['if mana >= $need:', '    print("Cast!")', 'else:', '    print("Rest")'],
         },
+
+        {
+          type: 'predict', vars: R => ({ n: R.int(1, 99) }), input: ['$n'], text: 'Someone types $n. What will it say?', code: ['n = int(input("Number: "))', 'if n % 2 == 0:', '    print("even")', 'else:', '    print("odd")'],
+          explain: '$n % 2 is $(n % 2).',
+        },
       ],
       learn: [{ title: 'else', code: 'if hp > 0:\n    print("Alive")\nelse:\n    print("Fainted")', text: 'Runs when the if question is False. Exactly one of the two blocks runs.' }],
     },
@@ -205,6 +210,40 @@ const WORLD3 = {
         },
       ],
       learn: [{ title: 'elif', code: 'if a:\n    ...\nelif b:\n    ...\nelse:\n    ...', text: 'Checks questions top to bottom and runs only the first True branch.' }],
+    },
+
+    {
+      id: '3-5b', title: 'Choosing with match', bg: 'crossroads', npc: 'oracle', mentor: 'oracle', tags: ['matchq'], late: true,
+      steps: [
+        { type: 'talk', who: 'oracle', text: 'When one value decides between many paths, match is tidier than a long elif chain. Python checks each case from the top and runs the first that fits. case _ fits anything, like else.' },
+        { type: 'demo', vars: R => ({ n: R.pick(['Harry', 'Hermione', 'Draco', 'Luna']) }), text: 'Run it.', code: ['name = "$n"', 'match name:', '    case "Harry" | "Hermione" | "Ron":', '        print("Gryffindor")', '    case "Draco":', '        print("Slytherin")', '    case _:', '        print("Who?")'] },
+        {
+          type: 'predict', vars: R => ({ d: R.pick(['north', 'south', 'n', 'up', 'west']) }), text: 'What will it say?',
+          code: ['way = "$d"', 'match way:', '    case "north" | "n":', '        print("You climb the hill")', '    case "south":', '        print("You reach the river")', '    case _:', '        print("You stay put")'],
+          wrong: ['You climb the hill', 'You reach the river', 'You stay put'],
+          explain: 'The | means "or". Only the first case that fits runs.',
+        },
+        {
+          type: 'predict', vars: R => ({ n: R.int(1, 9) }), text: 'Numbers work too. What will it say?',
+          code: ['roll = $n', 'match roll:', '    case 1:', '        print("Fumble")', '    case 6:', '        print("Critical")', '    case 2 | 3 | 4 | 5:', '        print("Hit")', '    case _:', '        print("Strange die")'],
+          wrong: ['Fumble', 'Critical', 'Hit', 'Strange die'],
+          explain: 'Each case compares against $n.',
+        },
+        {
+          type: 'fill', vars: R => ({ s: R.pick(['fire', 'ice', 'wind']) }), text: 'Finish the spell chooser. Anything unknown should fizzle.',
+          lines: ['spell = "$s"', '[] spell:', '    case "fire":', '        print("burn")', '    case "ice" | "frost":', '        print("freeze")', '    case []:', '        print("fizzle")'],
+          chips: ['match', '_', 'if', 'else'], answer: [['match', '_']],
+          hints: ['The block starts with match.', 'case _ catches everything else.'],
+        },
+        {
+          type: 'write', vars: R => ({ p: R.pick(['rock', 'paper', 'scissors', 'lizard']) }), text: 'move holds a word. Use match: print "fist" for "rock", "flat" for "paper", "snip" for "scissors", and "?" for anything else.',
+          starter: ['move = "$p"'], keys: ['match', 'move', ':', 'case', '"rock"', '"paper"', '"scissors"', '_', 'print', '("fist")', '("flat")', '("snip")', '("?")'],
+          require: l => (has(l, /match\s+move\s*:/) && has(l, /case\s+_/) ? null : 'Use match move: with a case _ at the end.'),
+          hints: ['match move: / case "rock": / print("fist")', 'Add cases for paper and scissors, then case _: / print("?")'],
+          solution: ['match move:', '    case "rock":', '        print("fist")', '    case "paper":', '        print("flat")', '    case "scissors":', '        print("snip")', '    case _:', '        print("?")'],
+        },
+      ],
+      learn: [{ title: 'match and case', code: 'match x:\n    case "a" | "b":\n        ...\n    case _:\n        ...', text: 'Pick a path by comparing one value against cases. | means or, _ means anything else.' }],
     },
     {
       id: '3-6', title: 'Both, either, neither', bg: 'crossroads', npc: 'oracle', mentor: 'oracle', tags: ['logic'],

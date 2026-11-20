@@ -289,7 +289,7 @@ const Engine = (() => {
   }
   const REMIX = { trace: remixTrace, count: remixCount, whichcode: remixWhich, order: remixOrder, spot: remixSpot };
   function remix(st, R, ctx) {
-    if (st.type !== 'predict' || st.noRemix || st.measure || st.reward || st.given) return st;
+    if (st.type !== 'predict' || st.noRemix || st.measure || st.reward || st.given || st.shell) return st;
     const forced = ctx.format;
     if (!forced && !(R.rand() < (ctx.remix || 0))) return st;
     const res = Py.run(st.code, runOpts(st));
@@ -347,11 +347,18 @@ const Engine = (() => {
         st.answer = st.choices.indexOf(right);
       }
       st = remix(st, R, ctx);
+      // hard worlds: no choices to lean on, type the answer yourself
+      if (ctx.hard && st.type === 'predict' && !st.shell && !st.given && st.format !== 'whichcode' && !st.noHard) {
+        st.typed = true;
+        const res = Py.run(st.code, runOpts(st));
+        st.errType = res.error ? res.error.type : null;
+      }
     }
     if (st.type === 'fill') {
       st.chips = R.shuffle(st.chips);
       if (ctx.hard && !st.noHard) st = hardFill(st);
     }
+    if (st.type === 'fix' && ctx.hard && !st.noHard) st.typedFix = true;
     if (st.type === 'fix' && st.format !== 'spot') {
       const right = st.options[st.answer];
       st.options = R.shuffle(st.options);
@@ -378,6 +385,19 @@ const Engine = (() => {
     return v;
   }
 
-  return { makeR, instantiate, refProgram, fillProgram, mutants, dmg, damageOf, tpl, runOpts, FORMATS, weightedTag, WORDS, NAMES, ITEMS };
+  // checks a typed answer against the right one; spaces at line ends and " / " vs new lines do not matter
+  function answerOk(st, typed) {
+    const right = st.choices[st.answer];
+    const norm = t => String(t).replace(/\r/g, '').split(/\n| \/ /).join('\n').replace(/\n+$/, '');
+    const t = norm(typed), r = norm(right);
+    if (t === r) return true;
+    if (st.measure === 'errtype' && t.toLowerCase() === r.toLowerCase()) return true;
+    if (r === 'Error' && st.errType && (t === st.errType || t.toLowerCase() === 'error')) return true;
+    if (/^".*"$/.test(r) && t === r.slice(1, -1)) return true;
+    if (r === 'No error' && /^(no error|none|nothing)$/i.test(t)) return true;
+    return false;
+  }
+
+  return { answerOk, makeR, instantiate, refProgram, fillProgram, mutants, dmg, damageOf, tpl, runOpts, FORMATS, weightedTag, WORDS, NAMES, ITEMS };
 })();
 if (typeof module !== 'undefined') module.exports = Engine;
