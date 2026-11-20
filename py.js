@@ -161,8 +161,8 @@ const Py = (() => {
         i = j; continue;
       }
       // string prefixes: f (formatted), r (raw, backslashes stay), rf / fr
-      const pm = /^([rRfF]{1,2})["']/.exec(src.slice(i, i + 3));
-      const pre = pm && !/^(rr|ff)$/i.test(pm[1]) ? pm[1].toLowerCase() : '';
+      const pm = /^([rRfFbB]{1,2})["']/.exec(src.slice(i, i + 3));
+      const pre = pm && !/^(rr|ff|bb|fb|bf)$/i.test(pm[1]) ? pm[1].toLowerCase() : '';
       if (c === '"' || c === "'" || pre) {
         const isF = pre.includes('f'), raw = pre.includes('r');
         let j = i + pre.length;
@@ -184,7 +184,7 @@ const Py = (() => {
           val += src[j]; j++;
         }
         if (j >= src.length) throw err(triple ? `unterminated triple-quoted string literal (detected at line ${lineNo})` : `unterminated ${isF ? 'f-' : ''}string literal (detected at line ${lineNo})`);
-        toks.push({ k: isF ? 'fstr' : 'str', v: val, raw });
+        toks.push({ k: isF ? 'fstr' : pre.includes('b') ? 'bytes' : 'str', v: val, raw });
         i = j + close.length; continue;
       }
       if (/[A-Za-z_]/.test(c)) {
@@ -270,6 +270,7 @@ const Py = (() => {
         while (at() && at().k === 'str') s += toks[p++].v; // implicit concatenation
         return { n: 'lit', val: V.str(s) };
       }
+      if (t.k === 'bytes') { let s = t.v; while (at() && at().k === 'bytes') s += toks[p++].v; return { n: 'lit', val: makeBytes(s) }; }
       if (t.k === 'fstr') return { n: 'fstr', parts: parseF(t.v, lineNo) };
       if (t.k === 'kw') {
         if (t.v === 'True' || t.v === 'False') return { n: 'lit', val: V.bool(t.v === 'True') };
