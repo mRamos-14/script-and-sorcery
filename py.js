@@ -2552,7 +2552,7 @@ const Py = (() => {
                 failed = err;
                 enterHandler(h, err, scope, ctx);
                 ctx.excStack.push(err);
-                try { yield* gexec(h.body, scope, ctx); } finally { ctx.excStack.pop(); }
+                try { yield* gexec(h.body, scope, ctx); } finally { ctx.excStack.pop(); if (h.as) delete scope.vars[h.as]; }
               }
               if (!failed && s.orelse) { ctx.trace.push({ kind: 'cond', line: s.elseLine, value: true, label: 'no error' }); yield* gexec(s.orelse, scope, ctx); }
             } finally {
@@ -3185,7 +3185,7 @@ const Py = (() => {
             failed = err;
             enterHandler(h, err, scope, ctx);
             ctx.excStack.push(err);
-            try { execBlock(h.body, scope, ctx); } finally { ctx.excStack.pop(); }
+            try { execBlock(h.body, scope, ctx); } finally { ctx.excStack.pop(); if (h.as) delete scope.vars[h.as]; }
           }
           if (!failed && s.orelse) { ctx.trace.push({ kind: 'cond', line: s.elseLine, value: true, label: 'no error' }); execBlock(s.orelse, scope, ctx); }
         } finally {

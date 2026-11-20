@@ -71,9 +71,9 @@ with fresh values every play.
 | 42 | The Nesting Woods | closures, factories, nonlocal state | ours | ✅ |
 | 43 | The Enchanter's Workshop | decorators, wraps, decorators with arguments | ours | ✅ |
 | 44 | The Sealed Chambers | context managers, __enter__/__exit__, contextlib | ours | ✅ |
-| 45 | The Court of Exceptions | custom exceptions, hierarchies, raise from | ours, CS50P | 🔨 |
-| 46 | The Collector's Hoard | Counter, defaultdict, namedtuple, deque | ours | 🔨 |
-| 47 | The Archetype Forge | dataclasses, Enum | ours | 🔨 |
+| 45 | The Court of Exceptions | custom exceptions, hierarchies, raise from | ours, CS50P | ✅ |
+| 46 | The Collector's Hoard | Counter, defaultdict, namedtuple, deque | ours | ✅ |
+| 47 | The Archetype Forge | dataclasses, Enum | ours | ✅ |
 | 48 | The Loom of Fate | itertools | ours | 🔨 |
 | 49 | The Alchemist's Tools | functools: reduce, partial, lru_cache (+ R) | ours | 🔨 |
 
