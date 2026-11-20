@@ -833,7 +833,19 @@ const Py = (() => {
         if (!inner.trim()) throw err("f-string: valid expression required before '}'");
         if (buf) parts.push(buf);
         buf = '';
-        parts.push({ e: makeParser(tokenize(inner.trim(), lineNo), lineNo).expr(), spec, conv, debug });
+        let specParts = null;
+        if (spec != null && spec.includes('{')) {
+          specParts = [];
+          let last = 0;
+          spec.replace(/\{([^{}]*)\}/g, (all, ex, at) => {
+            if (at > last) specParts.push(spec.slice(last, at));
+            specParts.push(makeParser(tokenize(ex.trim(), lineNo), lineNo).expr());
+            last = at + all.length;
+            return all;
+          });
+          if (last < spec.length) specParts.push(spec.slice(last));
+        }
+        parts.push({ e: makeParser(tokenize(inner.trim(), lineNo), lineNo).expr(), spec, specParts, conv, debug });
         i = j + 1; continue;
       }
       if (c === '}') throw err("f-string: single '}' is not allowed");
@@ -2634,7 +2646,8 @@ const Py = (() => {
         if (pt.conv === 'r') v = V.str(repr(v));
         else if (pt.conv === 's') v = V.str(fmt(v));
         else if (pt.debug && pt.spec == null) v = V.str(repr(v));
-        return pre + (pt.spec != null ? formatSpec(v, pt.spec) : fmt(v));
+        const spec = pt.specParts ? pt.specParts.map(p => (typeof p === 'string' ? p : fmt(evalE(p, scope, ctx)))).join('') : pt.spec;
+        return pre + (spec != null ? formatSpec(v, spec) : fmt(v));
       }).join(''));
       case 'method': {
         const obj = evalE(e.obj, scope, ctx);
