@@ -35,7 +35,7 @@ const Py = (() => {
   const KEYWORDS = ['if', 'elif', 'else', 'and', 'or', 'not', 'in', 'is', 'True', 'False', 'None', 'for', 'while', 'def', 'return', 'class', 'import', 'from', 'pass', 'break', 'continue', 'lambda', 'with', 'try', 'except', 'finally', 'raise', 'del', 'as', 'global', 'nonlocal', 'yield', 'assert'];
   const LATER = [];
   const STR_METHODS = ['upper', 'lower', 'title', 'capitalize', 'strip', 'lstrip', 'rstrip', 'replace', 'count', 'find', 'rfind', 'index', 'rindex', 'startswith', 'endswith', 'isdigit', 'isalpha', 'isalnum', 'isupper', 'islower', 'isspace', 'isnumeric', 'split', 'rsplit', 'join', 'splitlines', 'center', 'ljust', 'rjust', 'zfill', 'removeprefix', 'removesuffix', 'partition', 'swapcase', 'casefold', 'format'];
-  const FILE_METHODS = ['read', 'readline', 'readlines', 'write', 'close'];
+  const FILE_METHODS = ['read', 'readline', 'readlines', 'write', 'writelines', 'close', 'flush'];
   const LIST_METHODS = ['append', 'extend', 'insert', 'pop', 'remove', 'index', 'count', 'sort', 'reverse', 'clear', 'copy'];
   const DICT_METHODS = ['get', 'keys', 'values', 'items', 'pop', 'update', 'clear', 'copy', 'setdefault', 'popitem'];
   const SET_METHODS = ['add', 'remove', 'discard', 'pop', 'clear', 'copy', 'union', 'intersection', 'difference', 'symmetric_difference', 'issubset', 'issuperset', 'isdisjoint', 'update'];
@@ -1208,7 +1208,8 @@ const Py = (() => {
   }
 
   /* ---------- the virtual bookshelf (files) ---------- */
-  const fileText = f => f.fs.get(f.name) || '';
+  // text mode reads \r\n and \r as \n (Python's universal newlines), unless newline="" was given
+  const fileText = f => { const t = f.fs.get(f.name) || ''; return f.universal ? t.replace(/\r\n?/g, '\n') : t; };
   function needOpen(f) { if (f.closed) throw new PyError('ValueError', 'I/O operation on closed file.'); }
   function needRead(f) { needOpen(f); if (f.mode !== 'r') throw new PyError('UnsupportedOperation', 'not readable'); }
   function needWrite(f) { needOpen(f); if (f.mode === 'r') throw new PyError('UnsupportedOperation', 'not writable'); }
@@ -1228,11 +1229,20 @@ const Py = (() => {
     if (m !== 'r' && !isDirPath(ctx, parentPath(key))) throw new PyError('FileNotFoundError', `[Errno 2] No such file or directory: ${strRepr(shown)}`);
     if (m === 'w') { ctx.fs.set(key, ''); ctx.emit({ kind: 'file', name: key, text: '' }); }
     if (m === 'a' && !ctx.fs.has(key)) { ctx.fs.set(key, ''); ctx.emit({ kind: 'file', name: key, text: '' }); }
-    return { t: 'file', name: key, mode: m, pos: 0, closed: false, fs: ctx.fs };
+    const universal = !(kw.newline && kw.newline.t === 'str' && kw.newline.v === '');
+    return { t: 'file', name: key, mode: m, pos: 0, closed: false, fs: ctx.fs, universal };
   }
+  // like Python, writes wait in a buffer until the file is flushed or closed
   function writeFile(f, text, ctx) {
     needWrite(f);
-    const all = fileText(f) + text;
+    f.pending = (f.pending || '') + text;
+    (ctx.openFiles || (ctx.openFiles = new Set())).add(f);
+    if (f.pending.length >= 8192) flushFile(f, ctx);
+  }
+  function flushFile(f, ctx) {
+    if (!f.pending) return;
+    const all = (f.fs.get(f.name) || '') + f.pending;
+    f.pending = '';
     f.fs.set(f.name, all);
     ctx.emit({ kind: 'file', name: f.name, text: all });
   }
@@ -1251,7 +1261,9 @@ const Py = (() => {
         writeFile(f, args[0].v, ctx);
         return V.int(args[0].v.length);
       }
-      case 'close': argCount(name, args, 0); f.closed = true; return V.none;
+      case 'close': argCount(name, args, 0); flushFile(f, ctx); f.closed = true; return V.none;
+      case 'flush': argCount(name, args, 0); flushFile(f, ctx); return V.none;
+      case 'writelines': argCount(name, args, 1); needWrite(f); for (const x of iterate(args[0])) { if (x.t !== 'str') throw new PyError('TypeError', 'write() argument must be str, not ' + typeName(x)); writeFile(f, x.v, ctx); } return V.none;
     }
   }
 
@@ -2819,7 +2831,7 @@ const Py = (() => {
   function exitWith(mgrs, err, s, ctx) {
     for (const v of mgrs.slice().reverse()) {
       if (v.t === 'file') {
-        if (!v.closed) { v.closed = true; ctx.trace.push({ kind: 'cond', line: s.line, value: true, label: `closed ${v.name}` }); }
+        if (!v.closed) { flushFile(v, ctx); v.closed = true; ctx.trace.push({ kind: 'cond', line: s.line, value: true, label: `closed ${v.name}` }); }
       } else if (v.t === 'instance') {
         const ex = classAttr(v.cls, '__exit__');
         const e = err instanceof PyError ? errValue(err) : null;
@@ -3390,7 +3402,7 @@ const Py = (() => {
     });
   }
   /* csv */
-  function csvParse(line) {
+  function csvParse(line, delim = ',') {
     const out = [];
     let cur = '', q = false, i = 0;
     const s = line.replace(/\r?\n$/, '');
@@ -3398,19 +3410,20 @@ const Py = (() => {
       const c = s[i];
       if (q) { if (c === '"' && s[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; }
       else if (c === '"' && cur === '') q = true;
-      else if (c === ',') { out.push(cur); cur = ''; }
+      else if (c === delim) { out.push(cur); cur = ''; }
       else cur += c;
     }
     out.push(cur);
     return line.replace(/\r?\n$/, '') === '' ? [] : out;
   }
-  const csvField = v => { const s = v.t === 'NoneType' ? '' : fmt(v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const csvField = (v, delim = ',') => { const s = v.t === 'NoneType' ? '' : fmt(v); return /["\r\n]/.test(s) || s.includes(delim) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   function makeCsv() {
-    const lines = src => { const it = iterOf(src); return () => { for (;;) { const v = it.next(); if (v === DONE) return DONE; const row = csvParse(v.v); if (row.length || v.v.trim()) return row; } }; };
+    const lines = (src, delim) => { const it = iterOf(src); return () => { for (;;) { const v = it.next(); if (v === DONE) return DONE; const row = csvParse(v.v, delim); if (row.length || v.v.trim()) return row; } }; };
+    const delimOf = kw => (kw.delimiter ? fmt(kw.delimiter) : ',');
     return mkModule('csv', {
-      reader: nat('reader', ([src]) => { const nx = lines(src); return mkIter('_csv.reader', () => { const r = nx(); return r === DONE ? DONE : V.list(r.map(V.str)); }); }),
+      reader: nat('reader', ([src], kw) => { const nx = lines(src, delimOf(kw)); return mkIter('_csv.reader', () => { const r = nx(); return r === DONE ? DONE : V.list(r.map(V.str)); }); }),
       DictReader: nat('DictReader', ([src], kw) => {
-        const nx = lines(src);
+        const nx = lines(src, delimOf(kw));
         let names = kw.fieldnames ? iterate(kw.fieldnames).map(x => x.v) : null;
         const it = mkIter('DictReader', () => {
           if (!names) { const h = nx(); if (h === DONE) return DONE; names = h; }
@@ -3423,10 +3436,10 @@ const Py = (() => {
         it.attrs = new Map([['fieldnames', () => { if (!names) { const h = nx(); names = h === DONE ? [] : h; } return V.list(names.map(V.str)); }]]);
         return it;
       }),
-      writer: nat('writer', ([f], kw, ctx) => mkObj('_csv.writer', {
-        writerow: nat('writerow', ([row]) => { writeFile(f, iterate(row).map(csvField).join(',') + '\r\n', ctx); return V.none; }),
-        writerows: nat('writerows', ([rows]) => { for (const row of iterate(rows)) writeFile(f, iterate(row).map(csvField).join(',') + '\r\n', ctx); return V.none; }),
-      })),
+      writer: nat('writer', ([f], kw, ctx) => { const dl = delimOf(kw); return mkObj('_csv.writer', {
+        writerow: nat('writerow', ([row]) => { writeFile(f, iterate(row).map(v => csvField(v, dl)).join(dl) + '\r\n', ctx); return V.none; }),
+        writerows: nat('writerows', ([rows]) => { for (const row of iterate(rows)) writeFile(f, iterate(row).map(v => csvField(v, dl)).join(dl) + '\r\n', ctx); return V.none; }),
+      }); }),
       DictWriter: nat('DictWriter', ([f, fn], kw, ctx) => {
         const names = iterate(fn || kw.fieldnames).map(x => x.v);
         return mkObj('csv.DictWriter', {
@@ -4304,7 +4317,9 @@ const Py = (() => {
     const globals = { vars: { __name__: V.str('__main__') }, parent: null, fn: false, locals: new Set() };
     const prevCur = CUR, prevSafe = SAFE;
     CUR = ctx; SAFE = 0; OBJID = 0;
-    const done = (error, extra) => ({ trace: ctx.trace, error, output: error && error.compile ? [] : outputOf(ctx.trace), files: files(), hits: ctx.hits, unordered: !!ctx.unordered, finalEnv: snapshot(globals), ...extra });
+    // the spell ending closes every file, so buffered writes reach the disk
+    const done = (error, extra) => { for (const f of ctx.openFiles || []) flushFile(f, ctx); return doneRaw(error, extra); };
+    const doneRaw = (error, extra) => ({ trace: ctx.trace, error, output: error && error.compile ? [] : outputOf(ctx.trace), files: files(), hits: ctx.hits, unordered: !!ctx.unordered, finalEnv: snapshot(globals), ...extra });
     try {
       let prog;
       try { prog = compile(lines); }

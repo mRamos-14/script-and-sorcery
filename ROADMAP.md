@@ -49,11 +49,11 @@ with fresh values every play.
 
 ## Act VI · Practical Python
 | 26 | The Great Bazaar | libraries, pip, argparse | CS50P | ✅ |
-| 27 | The Sundial Plaza | datetime, date, timedelta, strftime/strptime, comparing dates, time | ATBS 17 | 🔨 |
-| 28 | The Labyrinth of Folders | pathlib, os.path, listing and walking folders, shutil copy/move | ATBS 9-10 | 🔨 |
+| 27 | The Sundial Plaza | datetime, date, timedelta, strftime/strptime, comparing dates, time | ATBS 17 | ✅ |
+| 28 | The Labyrinth of Folders | pathlib, os.path, listing and walking folders, shutil copy/move | ATBS 9-10 | ✅ |
 | 29 | The Pattern Marsh | regular expressions | CS50P, Py4E 11, ATBS 7 | ✅ |
-| 30 | The Copyist's Guild | text processing: parsing logs and mail, cleaning data, formatting reports, str.format specs | Py4E 11, ATBS 6 | 🔨 |
-| 31 | The Watchtower | debugging: reading tracebacks, print debugging, assert, logging levels, rubber duck, binary search for bugs | ATBS 11, MIT, ours | 🔨 |
+| 30 | The Copyist's Guild | text processing: parsing logs and mail, cleaning data, formatting reports, str.format specs | Py4E 11, ATBS 6 | ✅ |
+| 31 | The Watchtower | debugging: reading tracebacks, print debugging, assert, logging levels, rubber duck, binary search for bugs | ATBS 11, MIT, ours | ✅ |
 | 32 | The Proving Grounds | testing (+ R) | CS50P, MIT | ✅ |
 
 ## Act VII · Data and the web
