@@ -34,7 +34,7 @@ const Py = (() => {
   const excParent = c => (c === 'BaseException' ? null : EXC_PARENT[c] || 'Exception');
   const KEYWORDS = ['if', 'elif', 'else', 'and', 'or', 'not', 'in', 'is', 'True', 'False', 'None', 'for', 'while', 'def', 'return', 'class', 'import', 'from', 'pass', 'break', 'continue', 'lambda', 'with', 'try', 'except', 'finally', 'raise', 'del', 'as', 'global', 'nonlocal', 'yield', 'assert'];
   const LATER = [];
-  const STR_METHODS = ['upper', 'lower', 'title', 'capitalize', 'strip', 'lstrip', 'rstrip', 'replace', 'count', 'find', 'rfind', 'index', 'rindex', 'startswith', 'endswith', 'isdigit', 'isalpha', 'isalnum', 'isupper', 'islower', 'isspace', 'isnumeric', 'split', 'rsplit', 'join', 'splitlines', 'center', 'ljust', 'rjust', 'zfill', 'removeprefix', 'removesuffix', 'partition', 'swapcase', 'casefold', 'format'];
+  const STR_METHODS = ['encode', 'upper', 'lower', 'title', 'capitalize', 'strip', 'lstrip', 'rstrip', 'replace', 'count', 'find', 'rfind', 'index', 'rindex', 'startswith', 'endswith', 'isdigit', 'isalpha', 'isalnum', 'isupper', 'islower', 'isspace', 'isnumeric', 'split', 'rsplit', 'join', 'splitlines', 'center', 'ljust', 'rjust', 'zfill', 'removeprefix', 'removesuffix', 'partition', 'swapcase', 'casefold', 'format'];
   const FILE_METHODS = ['read', 'readline', 'readlines', 'write', 'writelines', 'close', 'flush'];
   const LIST_METHODS = ['append', 'extend', 'insert', 'pop', 'remove', 'index', 'count', 'sort', 'reverse', 'clear', 'copy'];
   const DICT_METHODS = ['get', 'keys', 'values', 'items', 'pop', 'update', 'clear', 'copy', 'setdefault', 'popitem'];
@@ -1839,6 +1839,7 @@ const Py = (() => {
     if (obj.t === 'str') {
       if (!STR_METHODS.includes(name)) throw fail();
       if (name === 'format') return V.str(strFormat(obj.v, args, kw));
+      if (name === 'encode') return makeBytes(obj.v);
       if (name !== 'split' && name !== 'rsplit') noKw(name, kw);
       const s = obj.v;
       switch (name) {
@@ -3422,7 +3423,7 @@ const Py = (() => {
     const opts = kw => [kw.indent && kw.indent.t !== 'NoneType' ? needInt(kw.indent) : null, kw.sort_keys && truthy(kw.sort_keys)];
     return mkModule('json', {
       dumps: nat('dumps', ([x], kw) => V.str(jsonDump(x, ...opts(kw), 0))),
-      loads: nat('loads', ([s]) => { if (s.t !== 'str') throw new PyError('TypeError', `the JSON object must be str, bytes or bytearray, not ${typeName(s)}`); return jsonParse(s.v); }),
+      loads: nat('loads', ([s]) => { if (isBytes(s)) s = V.str(s.attrs.get('_text').v); if (s.t !== 'str') throw new PyError('TypeError', `the JSON object must be str, bytes or bytearray, not ${typeName(s)}`); return jsonParse(s.v); }),
       dump: nat('dump', ([x, f], kw, ctx) => { writeFile(f, jsonDump(x, ...opts(kw), 0), ctx); return V.none; }),
       load: nat('load', ([f]) => { needRead(f); return jsonParse(readRest(f)); }),
       JSONDecodeError: { t: 'exctype', v: 'JSONDecodeError' },
@@ -3623,10 +3624,20 @@ const Py = (() => {
       url: V.str(url),
       text: V.str(data == null ? 'Not Found' : typeof data === 'string' ? data : JSON.stringify(data)),
       json: nat('json', () => { if (data == null) throw new PyError('JSONDecodeError', 'Expecting value: line 1 column 1 (char 0)'); return jsonParse(typeof data === 'string' ? data : JSON.stringify(data)); }),
+      raise_for_status: nat('raise_for_status', () => { if (data == null) throw new PyError('HTTPError', `404 Client Error: Not Found for url: ${url}`); return V.none; }),
+      content: makeBytes(data == null ? 'Not Found' : typeof data === 'string' ? data : JSON.stringify(data)),
     });
+    const exc = n => ({ t: 'exctype', v: n });
     return mkModule('requests', {
-      get: nat('get', ([u]) => {
-        if (!u || u.t !== 'str') throw new PyError('TypeError', 'get() missing 1 required positional argument: \'url\'');
+      HTTPError: exc('HTTPError'), ConnectionError: exc('ConnectionError'), RequestException: exc('OSError'),
+      exceptions: mkModule('requests.exceptions', { HTTPError: exc('HTTPError'), ConnectionError: exc('ConnectionError'), RequestException: exc('OSError') }),
+      get: nat('get', ([u0], kw) => {
+        if (!u0 || u0.t !== 'str') throw new PyError('TypeError', 'get() missing 1 required positional argument: \'url\'');
+        let u = u0;
+        if (kw.params && kw.params.t === 'dict') {
+          const q = [...kw.params.v.values()].map(([k, v]) => encodeURIComponent(fmt(k)).replace(/%20/g, '+') + '=' + encodeURIComponent(fmt(v)).replace(/%20/g, '+')).join('&');
+          u = V.str(u0.v + (u0.v.includes('?') ? '&' : '?') + q);
+        }
         const site = (ctx.web || {});
         const key = Object.keys(site).find(k => k === u.v || k === u.v.replace(/\?.*$/, ''));
         if (!key && !Object.keys(site).some(k => u.v.startsWith(k.split('/').slice(0, 3).join('/')))) throw new PyError('ConnectionError', `Failed to resolve ${u.v.split('/')[2] || u.v}`);
@@ -4348,7 +4359,6 @@ const Py = (() => {
       const are = /([\w:.-]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s"'>\/=`]+))?/g;
       let am;
       while ((am = are.exec(open[2]))) attrs.push([html ? am[1].toLowerCase() : am[1], am[2] == null ? '' : unEntity(am[2].replace(/^["']|["']$/g, ''))]);
-      if (html && ['p', 'li', 'option'].includes(name) && cur.tag === name) cur = cur.parent;
       const node = { tag: name, attrs, kids: [], text: null, tail: null, parent: cur };
       if (!html && cur === root && root.kids.length) throw fail('junk after document element');
       cur.kids.push(node);
@@ -5217,7 +5227,226 @@ const Py = (() => {
       sqlite_version: V.str('3.45.0'),
     });
   }
-  const MODULES = { copy: makeCopy, sqlite3: makeSqlite, 'xml.etree.ElementTree': makeEtree, datetime: makeDatetime, logging: makeLogging, pathlib: makePathlib, os: makeOs, 'os.path': ctx => makeOs(ctx).members.get('path'), shutil: makeShutil, argparse: makeArgparse, random: makeRandom, math: makeMath, statistics: makeStatistics, json: makeJson, csv: makeCsv, sys: makeSys, re: makeRe, pytest: makePytest, requests: makeRequests, string: STRING_MOD };
+  /* ---------- bytes (just enough for the web), urllib and bs4 ---------- */
+  let BYTES_CLS = null;
+  const utf8 = t => new TextEncoder().encode(t);
+  function makeBytes(text) {
+    if (!BYTES_CLS) {
+      BYTES_CLS = makeClass('bytes', [], {});
+      const tx = o => o.attrs.get('_text').v;
+      const d = {
+        decode: nat('decode', ([o]) => V.str(tx(o))),
+        __len__: nat('__len__', ([o]) => V.int(utf8(tx(o)).length)),
+        __repr__: nat('__repr__', ([o]) => {
+          let out = '';
+          for (const b of utf8(tx(o))) out += b === 92 ? '\\\\' : b === 39 ? "\\'" : b === 10 ? '\\n' : b === 13 ? '\\r' : b === 9 ? '\\t' : b >= 32 && b < 127 ? String.fromCharCode(b) : '\\x' + b.toString(16).padStart(2, '0');
+          return V.str("b'" + out + "'");
+        }),
+        __eq__: nat('__eq__', ([a, b]) => (b && b.cls === BYTES_CLS ? V.bool(tx(a) === tx(b)) : V.bool(false))),
+        __hash__: nat('__hash__', ([o]) => V.int([...tx(o)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 2147483647, 11))),
+        __iter__: nat('__iter__', ([o]) => { const bs = [...utf8(tx(o))]; let i = 0; return mkIter('bytes_iterator', () => (i < bs.length ? V.int(bs[i++]) : DONE)); }),
+        strip: nat('strip', ([o]) => makeBytes(tx(o).trim())),
+        split: nat('split', ([o]) => V.list(tx(o).trim().split(/\s+/).filter(Boolean).map(makeBytes))),
+        startswith: nat('startswith', ([o, p]) => V.bool(tx(o).startsWith(p.cls === BYTES_CLS ? tx(p) : fmt(p)))),
+      };
+      for (const k in d) BYTES_CLS.dict.set(k, d[k]);
+    }
+    return { t: 'instance', cls: BYTES_CLS, attrs: new Map([['_text', V.str(text)]]) };
+  }
+  const isBytes = v => v && v.t === 'instance' && v.cls === BYTES_CLS;
+  // the pretend internet: steps list the pages a spell may open (opts.web)
+  function webFetch(ctx, url) {
+    const site = ctx.web || {};
+    const key = Object.keys(site).find(k => k === url || k === url.replace(/\?.*$/, '') || k === url.replace(/\/$/, ''));
+    const host = (url.split('/')[2] || url);
+    const known = key || Object.keys(site).some(k => (k.split('/')[2] || k) === host);
+    if (!known) return { error: 'host', host };
+    if (!key) return { error: 404 };
+    const data = site[key];
+    return { text: typeof data === 'string' ? data : JSON.stringify(data) };
+  }
+  function makeUrllibRequest(ctx) {
+    const errMod = makeUrllibError(ctx);
+    const RESP = makeClass('http.client.HTTPResponse', [], {});
+    const rd = {
+      read: nat('read', ([r]) => { const t = r.rest; r.rest = ''; return makeBytes(t); }),
+      readline: nat('readline', ([r]) => { const i = r.rest.indexOf('\n'); const line = i < 0 ? r.rest : r.rest.slice(0, i + 1); r.rest = r.rest.slice(line.length); return makeBytes(line); }),
+      getcode: nat('getcode', () => V.int(200)),
+      close: nat('close', () => V.none),
+      __iter__: nat('__iter__', ([r]) => mkIter('iterator', () => { if (!r.rest) return DONE; const i = r.rest.indexOf('\n'); const line = i < 0 ? r.rest : r.rest.slice(0, i + 1); r.rest = r.rest.slice(line.length); return makeBytes(line); })),
+      __enter__: nat('__enter__', ([r]) => r),
+      __exit__: nat('__exit__', () => V.bool(false)),
+      status: { t: 'property', fget: nat('get', () => V.int(200)), fset: null },
+      url: { t: 'property', fget: nat('get', ([r]) => V.str(r.url)), fset: null },
+    };
+    for (const k in rd) RESP.dict.set(k, rd[k]);
+    return mkModule('urllib.request', {
+      urlopen: nat('urlopen', ([u]) => {
+        const url = fmt(u);
+        const res = webFetch(ctx, url);
+        if (res.error === 'host') throw errMod.raise('URLError', `<urlopen error [Errno 11001] getaddrinfo failed>`, url);
+        if (res.error === 404) throw errMod.raise('HTTPError', 'HTTP Error 404: Not Found', url);
+        return { t: 'instance', cls: RESP, attrs: new Map(), rest: res.text, url };
+      }),
+    });
+  }
+  function makeUrllibError(ctx) {
+    if (ctx.urlErr) return ctx.urlErr;
+    const URLError = makeClass('URLError', [{ t: 'exctype', v: 'OSError' }], {});
+    const HTTPError = makeClass('HTTPError', [URLError], {});
+    const mod = mkModule('urllib.error', { URLError, HTTPError });
+    mod.raise = (kind, msg) => { const inst = makeInstance(kind === 'HTTPError' ? HTTPError : URLError, [V.str(msg)], {}, ctx); const e = new PyError(kind, msg); e.obj = inst; return e; };
+    ctx.urlErr = mod;
+    ctx.modules['urllib.error'] = mod;
+    return mod;
+  }
+  function makeUrllibParse() {
+    const quote = (s, safe) => encodeURIComponent(s).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase()).replace(/%2F/g, safe.includes('/') ? '/' : '%2F').replace(/%7E/gi, '~');
+    const quotePlus = s => quote(s, '').replace(/%20/g, '+');
+    return mkModule('urllib.parse', {
+      quote: nat('quote', ([s, safe]) => V.str(quote(fmt(s), safe ? fmt(safe) : '/'))),
+      quote_plus: nat('quote_plus', ([s]) => V.str(quotePlus(fmt(s)))),
+      unquote: nat('unquote', ([s]) => V.str(decodeURIComponent(fmt(s)))),
+      urlencode: nat('urlencode', ([q]) => {
+        const pairs = q.t === 'dict' ? [...q.v.values()] : iterate(q).map(p => iterate(p));
+        return V.str(pairs.map(([k, v]) => quotePlus(fmt(k)) + '=' + quotePlus(fmt(v))).join('&'));
+      }),
+      urljoin: nat('urljoin', ([b, r]) => { try { return V.str(new URL(fmt(r), fmt(b)).href); } catch (e) { return r; } }),
+      urlparse: nat('urlparse', ([u]) => {
+        const m = /^(?:([a-zA-Z][\w+.-]*):)?(?:\/\/([^/?#]*))?([^?#]*)(?:\?([^#]*))?(?:#(.*))?$/.exec(fmt(u));
+        const parts = { scheme: m[1] || '', netloc: m[2] || '', path: m[3] || '', params: '', query: m[4] || '', fragment: m[5] || '' };
+        const o = mkObj('ParseResult', Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, V.str(v)])));
+        o.repr = () => `ParseResult(${Object.entries(parts).map(([k, v]) => `${k}=${strRepr(v)}`).join(', ')})`;
+        return o;
+      }),
+    });
+  }
+  /* bs4: BeautifulSoup over the forgiving HTML parser */
+  function makeBs4(ctx) {
+    const TAG = makeClass('Tag', [], {});
+    // a bs4 node: { kind: 'tag', name, attrs: [[k, v]], kids: [...], parent } or { kind: 'text', text, parent }
+    const fromMarkup = node => {
+      const t = { kind: 'tag', name: node.tag === '#document' ? '[document]' : node.tag, attrs: node.attrs, kids: [], parent: null };
+      const addText = s => { if (s) t.kids.push({ kind: 'text', text: s, parent: t }); };
+      addText(node.text);
+      for (const k of node.kids) { const c = fromMarkup(k); c.parent = t; t.kids.push(c); addText(k.tail); }
+      return t;
+    };
+    const wrap = n => { if (n.obj) return n.obj; const o = { t: 'instance', cls: TAG, attrs: new Map(), bs: n }; n.obj = o; return o; };
+    const nodeOf = o => { if (!o || !o.bs) throw new PyError('TypeError', 'expected a Tag'); return o.bs; };
+    const MULTI = ['class', 'rel', 'rev', 'headers', 'accesskey', 'accept-charset'];
+    const attrVal = (k, v) => (MULTI.includes(k) ? V.list(v.split(/\s+/).filter(Boolean).map(V.str)) : V.str(v));
+    const textOf = n => (n.kind === 'text' ? n.text : n.kids.map(textOf).join(''));
+    const descendants = n => { const out = []; const walk = x => { for (const k of x.kids) if (k.kind === 'tag') { out.push(k); walk(k); } }; walk(n); return out; };
+    const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const VOID = ['br', 'img', 'input', 'meta', 'link', 'hr', 'area', 'base', 'col', 'embed', 'source', 'track', 'wbr'];
+    const serialize = n => {
+      if (n.kind === 'text') return esc(n.text);
+      const inner = n.kids.map(serialize).join('');
+      if (n.name === '[document]') return inner;
+      const a = n.attrs.map(([k, v]) => ` ${k}="${v.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`).join('');
+      return VOID.includes(n.name) ? `<${n.name}${a}/>` : `<${n.name}${a}>${inner}</${n.name}>`;
+    };
+    // does a tag match find/find_all filters?
+    const matcher = (nameArg, attrsArg, kw) => {
+      const names = !nameArg || nameArg.t === 'NoneType' ? null : nameArg.t === 'bool' ? (nameArg.v ? null : []) : nameArg.t === 'list' ? nameArg.v.map(fmt) : [fmt(nameArg)];
+      const conds = [];
+      if (attrsArg && attrsArg.t === 'dict') for (const [k, v] of attrsArg.v.values()) conds.push([fmt(k), v]);
+      for (const [k, v] of Object.entries(kw)) if (!['limit', 'recursive', 'string', 'text'].includes(k)) conds.push([k === 'class_' ? 'class' : k.replace(/_/g, '-'), v]);
+      const stringWant = kw.string || kw.text;
+      return n => {
+        if (names && !names.includes(n.name)) return false;
+        for (const [k, want] of conds) {
+          const hit = n.attrs.find(([a]) => a === k);
+          if (want.t === 'bool') { if (!!hit !== want.v) return false; continue; }
+          if (!hit) return false;
+          const vals = MULTI.includes(k) ? hit[1].split(/\s+/) : [hit[1]];
+          const wants = want.t === 'list' ? want.v.map(fmt) : [fmt(want)];
+          if (!vals.some(v => wants.includes(v)) && !(MULTI.includes(k) && wants.includes(hit[1]))) return false;
+        }
+        if (stringWant && textOf(n) !== fmt(stringWant)) return false;
+        return true;
+      };
+    };
+    const findAll = (o, args, kw) => {
+      const n = nodeOf(o);
+      const test = matcher(args[0], args[1] && args[1].t === 'dict' ? args[1] : null, kw);
+      const pool = kw.recursive && !truthy(kw.recursive) ? n.kids.filter(k => k.kind === 'tag') : descendants(n);
+      let hits = pool.filter(test);
+      const limit = kw.limit ? num(kw.limit) : args[1] && args[1].t === 'int' ? num(args[1]) : 0;
+      if (limit) hits = hits.slice(0, limit);
+      return hits;
+    };
+    // CSS selectors: tag, .class, #id, [attr], [attr=value], combined, with descendant ( ) and child (>) steps
+    const cssMatch = (n, simple) => {
+      const m = /^([\w-]*|\*)((?:[.#][\w-]+|\[[^\]]+\])*)$/.exec(simple);
+      if (!m) throw new PyError('ValueError', `Unsupported or invalid CSS selector: "${simple}"`);
+      if (m[1] && m[1] !== '*' && n.name !== m[1].toLowerCase()) return false;
+      for (const part of m[2].match(/[.#][\w-]+|\[[^\]]+\]/g) || []) {
+        if (part[0] === '.') { const c = n.attrs.find(([a]) => a === 'class'); if (!c || !c[1].split(/\s+/).includes(part.slice(1))) return false; }
+        else if (part[0] === '#') { const c = n.attrs.find(([a]) => a === 'id'); if (!c || c[1] !== part.slice(1)) return false; }
+        else { const am = /^\[([\w-]+)(?:\s*([~^$*]?=)\s*["']?([^"'\]]*)["']?)?\]$/.exec(part); const c = n.attrs.find(([a]) => a === am[1]); if (!c) return false; if (am[2]) { const v = c[1], w = am[3]; const ok = am[2] === '=' ? v === w : am[2] === '^=' ? v.startsWith(w) : am[2] === '$=' ? v.endsWith(w) : am[2] === '*=' ? v.includes(w) : v.split(/\s+/).includes(w); if (!ok) return false; } }
+      }
+      return true;
+    };
+    const select = (root, sel) => {
+      const results = new Set();
+      for (const group of sel.split(',')) {
+        const tokens = group.trim().replace(/\s*>\s*/g, ' > ').split(/\s+/);
+        let cur = [root];
+        let child = false;
+        for (const tok of tokens) {
+          if (tok === '>') { child = true; continue; }
+          const next = [];
+          for (const c of cur) for (const d of child ? c.kids.filter(k => k.kind === 'tag') : descendants(c)) if (cssMatch(d, tok) && !next.includes(d)) next.push(d);
+          cur = next;
+          child = false;
+        }
+        cur.forEach(x => results.add(x));
+      }
+      const order = descendants(root);
+      return order.filter(x => results.has(x));
+    };
+    const d = {
+      name: { t: 'property', fget: nat('get', ([o]) => V.str(nodeOf(o).name)), fset: null },
+      attrs: { t: 'property', fget: nat('get', ([o]) => { const dd = dict(); for (const [k, v] of nodeOf(o).attrs) dd.v.set(keyOf(V.str(k)), [V.str(k), attrVal(k, v)]); return dd; }), fset: null },
+      text: { t: 'property', fget: nat('get', ([o]) => V.str(textOf(nodeOf(o)))), fset: null },
+      string: { t: 'property', fget: nat('get', ([o]) => { let n = nodeOf(o); while (n.kind === 'tag' && n.kids.length === 1 && n.kids[0].kind === 'tag') n = n.kids[0]; return n.kind === 'tag' && n.kids.length === 1 && n.kids[0].kind === 'text' ? V.str(n.kids[0].text) : V.none; }), fset: null },
+      contents: { t: 'property', fget: nat('get', ([o]) => V.list(nodeOf(o).kids.map(k => (k.kind === 'text' ? V.str(k.text) : wrap(k))))), fset: null },
+      children: { t: 'property', fget: nat('get', ([o]) => { const ks = nodeOf(o).kids.map(k => (k.kind === 'text' ? V.str(k.text) : wrap(k))); let i = 0; return mkIter('list_iterator', () => (i < ks.length ? ks[i++] : DONE)); }), fset: null },
+      parent: { t: 'property', fget: nat('get', ([o]) => (nodeOf(o).parent ? wrap(nodeOf(o).parent) : V.none)), fset: null },
+      get: nat('get', ([o, k, def]) => { const hit = nodeOf(o).attrs.find(([a]) => a === fmt(k)); return hit ? attrVal(hit[0], hit[1]) : def || V.none; }),
+      get_text: nat('get_text', ([o, sep], kw) => {
+        const s = sep ? fmt(sep) : kw.separator ? fmt(kw.separator) : '';
+        const strip = kw.strip && truthy(kw.strip);
+        const bits = [];
+        const walk = n => { for (const k of n.kids) { if (k.kind === 'text') bits.push(strip ? k.text.trim() : k.text); else walk(k); } };
+        walk(nodeOf(o));
+        return V.str((strip ? bits.filter(Boolean) : bits).join(s));
+      }),
+      find: nat('find', ([o, ...args], kw) => { const r = findAll(o, args, { ...kw, limit: V.int(1) }); return r.length ? wrap(r[0]) : V.none; }),
+      find_all: nat('find_all', ([o, ...args], kw) => V.list(findAll(o, args, kw).map(wrap))),
+      select: nat('select', ([o, sel]) => V.list(select(nodeOf(o), fmt(sel)).map(wrap))),
+      select_one: nat('select_one', ([o, sel]) => { const r = select(nodeOf(o), fmt(sel)); return r.length ? wrap(r[0]) : V.none; }),
+      __call__: nat('__call__', ([o, ...args], kw) => V.list(findAll(o, args, kw).map(wrap))),
+      __getitem__: nat('__getitem__', ([o, k]) => { const hit = nodeOf(o).attrs.find(([a]) => a === fmt(k)); if (!hit) throw new PyError('KeyError', strRepr(fmt(k))); return attrVal(hit[0], hit[1]); }),
+      __getattr__: nat('__getattr__', ([o, nm]) => { const r = descendants(nodeOf(o)).find(n => n.name === nm.v); return r ? wrap(r) : V.none; }),
+      __str__: nat('__str__', ([o]) => V.str(serialize(nodeOf(o)))),
+      __repr__: nat('__repr__', ([o]) => V.str(serialize(nodeOf(o)))),
+      __len__: nat('__len__', ([o]) => V.int(nodeOf(o).kids.length)),
+      __iter__: nat('__iter__', ([o]) => { const ks = nodeOf(o).kids.map(k => (k.kind === 'text' ? V.str(k.text) : wrap(k))); let i = 0; return mkIter('list_iterator', () => (i < ks.length ? ks[i++] : DONE)); }),
+    };
+    d.getText = d.get_text;
+    d.findAll = d.find_all;
+    for (const k in d) TAG.dict.set(k, d[k]);
+    const Soup = nat('BeautifulSoup', ([markup, parser]) => {
+      if (!markup) throw new PyError('TypeError', "BeautifulSoup() missing markup");
+      const text = isBytes(markup) ? markup.attrs.get('_text').v : markup.t === 'file' ? readRest(markup) : fmt(markup);
+      return wrap(fromMarkup(parseMarkup(text, true)));
+    });
+    return mkModule('bs4', { BeautifulSoup: Soup, Tag: TAG });
+  }
+  const MODULES = { 'urllib.request': makeUrllibRequest, 'urllib.parse': makeUrllibParse, 'urllib.error': makeUrllibError, bs4: makeBs4, copy: makeCopy, sqlite3: makeSqlite, 'xml.etree.ElementTree': makeEtree, datetime: makeDatetime, logging: makeLogging, pathlib: makePathlib, os: makeOs, 'os.path': ctx => makeOs(ctx).members.get('path'), shutil: makeShutil, argparse: makeArgparse, random: makeRandom, math: makeMath, statistics: makeStatistics, json: makeJson, csv: makeCsv, sys: makeSys, re: makeRe, pytest: makePytest, requests: makeRequests, string: STRING_MOD };
   function loadModule(name, ctx) {
     if (ctx.modules[name]) return ctx.modules[name];
     if (ctx.userModules && ctx.userModules[name]) return (ctx.modules[name] = runUserModule(name, ctx));
