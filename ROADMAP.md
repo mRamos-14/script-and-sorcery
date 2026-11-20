@@ -68,8 +68,8 @@ with fresh values every play.
 | 39 | The Skyward Gardens | lambda, map, filter, sorting keys | CS50P | ✅ |
 | 40 | The Shifting Sands | *args, **kwargs, type hints | CS50P | ✅ |
 | 41 | The River of Time | iterators, generators, comprehensions (+ R) | CS50P | ✅ |
-| 42 | The Nesting Woods | closures, factories, nonlocal state | ours | 🔨 |
-| 43 | The Enchanter's Workshop | decorators, wraps, decorators with arguments | ours | 🔨 |
+| 42 | The Nesting Woods | closures, factories, nonlocal state | ours | ✅ |
+| 43 | The Enchanter's Workshop | decorators, wraps, decorators with arguments | ours | ✅ |
 | 44 | The Sealed Chambers | context managers, __enter__/__exit__, contextlib | ours | 🔨 |
 | 45 | The Court of Exceptions | custom exceptions, hierarchies, raise from | ours, CS50P | 🔨 |
 | 46 | The Collector's Hoard | Counter, defaultdict, namedtuple, deque | ours | 🔨 |

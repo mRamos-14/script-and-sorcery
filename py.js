@@ -1123,7 +1123,10 @@ const Py = (() => {
           out.push({ ...st, line: it.i });
         }
       }
-      if (decos.length) throw synErr('invalid syntax', decos[decos.length - 1].line);
+      if (decos.length) {
+        if (pos < items.length) throw new PyError('IndentationError', 'unexpected unindent', items[pos].i);
+        throw synErr('invalid syntax', decos[decos.length - 1].line);
+      }
       return out;
     }
     function patNames(pt, set) {
