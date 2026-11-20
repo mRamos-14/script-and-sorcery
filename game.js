@@ -1241,7 +1241,7 @@
       else if (ev.kind === 'ret') { if (!skipped) { condBadge(ev.line, true, ev.label, 'yes'); await t(320); } }
       else if (ev.kind === 'error-caught') { if (!skipped) { hlLine(ev.line, 'err'); consoleNote(`Caught ${ev.type}: ${ev.msg}`, 'caught'); sfx('bad'); await t(420); } }
       else if (ev.kind === 'cast') { await castFx(ev.spell, ev.power); }
-      else if (ev.kind === 'file') { shelf[ev.name] = ev.text; if (!skipped) { renderShelf(shelf, ev.name); sfx('tap'); await t(260); } }
+      else if (ev.kind === 'file') { if (ev.text === null) delete shelf[ev.name]; else shelf[ev.name] = ev.text; if (!skipped) { renderShelf(shelf, ev.name); sfx('tap'); await t(260); } }
       else if (ev.kind === 'assign') { if (!skipped) { renderJars(ev.env, ev.name); await t(220); } }
       else if (ev.kind === 'step') { if (!skipped) renderJars(ev.env); }
       else if (ev.kind === 'error') {

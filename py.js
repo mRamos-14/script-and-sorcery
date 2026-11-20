@@ -1206,14 +1206,17 @@ const Py = (() => {
   function openFile(args, kw, ctx) {
     const name = args[0], mode = args[1] || kw.mode || V.str('r');
     if (!name) throw new PyError('TypeError', "open() missing required argument 'file' (pos 1)");
-    if (name.t !== 'str') throw new PyError('TypeError', `expected str, bytes or os.PathLike object, not ${typeName(name)}`);
+    if (name.t !== 'str' && !(name.t === 'instance' && name.attrs.has('_path'))) throw new PyError('TypeError', `expected str, bytes or os.PathLike object, not ${typeName(name)}`);
+    const shown = name.t === 'str' ? name.v : name.attrs.get('_path').v;
+    const key = normPath(shown);
     if (mode.t !== 'str') throw new PyError('TypeError', `open() argument 'mode' must be str, not ${typeName(mode)}`);
     const m = mode.v.replace('t', '');
     if (!['r', 'w', 'a'].includes(m)) throw new PyError('ValueError', `invalid mode: ${strRepr(mode.v)}`);
-    if (m === 'r' && !ctx.fs.has(name.v)) throw new PyError('FileNotFoundError', `[Errno 2] No such file or directory: ${strRepr(name.v)}`);
-    if (m === 'w') { ctx.fs.set(name.v, ''); ctx.emit({ kind: 'file', name: name.v, text: '' }); }
-    if (m === 'a' && !ctx.fs.has(name.v)) { ctx.fs.set(name.v, ''); ctx.emit({ kind: 'file', name: name.v, text: '' }); }
-    return { t: 'file', name: name.v, mode: m, pos: 0, closed: false, fs: ctx.fs };
+    if (m === 'r' && !ctx.fs.has(key)) throw new PyError(ctx.dirs && ctx.dirs.has(key) ? 'IsADirectoryError' : 'FileNotFoundError', `[Errno ${ctx.dirs && ctx.dirs.has(key) ? 21 : 2}] ${ctx.dirs && ctx.dirs.has(key) ? 'Is a directory' : 'No such file or directory'}: ${strRepr(shown)}`);
+    if (m !== 'r' && !isDirPath(ctx, parentPath(key))) throw new PyError('FileNotFoundError', `[Errno 2] No such file or directory: ${strRepr(shown)}`);
+    if (m === 'w') { ctx.fs.set(key, ''); ctx.emit({ kind: 'file', name: key, text: '' }); }
+    if (m === 'a' && !ctx.fs.has(key)) { ctx.fs.set(key, ''); ctx.emit({ kind: 'file', name: key, text: '' }); }
+    return { t: 'file', name: key, mode: m, pos: 0, closed: false, fs: ctx.fs };
   }
   function writeFile(f, text, ctx) {
     needWrite(f);
@@ -1384,6 +1387,40 @@ const Py = (() => {
   }
 
   /* ---------- arithmetic ---------- */
+  // "%s has %5.2f gold" % (name, gold): the old printf-style formatting
+  function pyPercent(f, args) {
+    let i = 0, mapping = null;
+    if (!Array.isArray(args)) { mapping = args; args = []; }
+    const out = f.replace(/%(?:\((\w+)\))?([-+ #0]*)(\d+)?(?:\.(\d+))?([sdirfFeEgGxXoc%]|.)?/g, (all, key, flags, width, prec, type) => {
+      if (type === '%') return '%';
+      if (!type || !'sdirfFeEgGxXoc'.includes(type)) throw new PyError('ValueError', `unsupported format character '${type || ''}' (0x${(type || ' ').charCodeAt(0).toString(16)})`);
+      let v;
+      if (key != null) {
+        if (!mapping || mapping.t !== 'dict') throw new PyError('TypeError', 'format requires a mapping');
+        const e = mapping.v.get(keyOf(V.str(key)));
+        if (!e) throw new PyError('KeyError', strRepr(key));
+        v = e[1];
+      } else {
+        if (i >= args.length) throw new PyError('TypeError', 'not enough arguments for format string');
+        v = args[i++];
+      }
+      const left = flags.includes('-');
+      if (type === 's' || type === 'r') {
+        let body = type === 's' ? fmt(v) : repr(v);
+        if (prec != null) body = body.slice(0, +prec);
+        const w = width ? +width : 0;
+        return left ? body.padEnd(w) : body.padStart(w);
+      }
+      if (type === 'c') { const body = v.t === 'str' ? v.v : String.fromCodePoint(num(v)); const w = width ? +width : 0; return left ? body.padEnd(w) : body.padStart(w); }
+      if (!isNum(v)) throw new PyError('TypeError', `%${type} format: a real number is required, not ${typeName(v)}`);
+      const t = type === 'i' ? 'd' : type;
+      const val = 'dxXo'.includes(t) ? V.int(Math.trunc(num(v))) : V.float(num(v));
+      const spec = (left ? '<' : '') + (flags.includes('+') ? '+' : flags.includes(' ') ? ' ' : '') + (flags.includes('#') ? '#' : '') + (flags.includes('0') && !left ? '0' : '') + (width || '') + (prec != null && !'dxXo'.includes(t) ? '.' + prec : '') + t;
+      return formatSpec(val, spec);
+    });
+    if (!mapping && i < args.length) throw new PyError('TypeError', 'not all arguments converted during string formatting');
+    return out;
+  }
   const BIN_DUNDER = { '+': 'add', '-': 'sub', '*': 'mul', '/': 'truediv', '//': 'floordiv', '%': 'mod', '**': 'pow', '@': 'matmul', '&': 'and', '|': 'or', '^': 'xor' };
   function binop(op, a, b, inplace) {
     if (a.t === 'instance' || b.t === 'instance') {
@@ -1439,7 +1476,7 @@ const Py = (() => {
         if (num(b) === 0) throw new PyError('ZeroDivisionError', anyFloat ? 'float modulo' : 'integer modulo by zero');
         return mkNum(num(a) - num(b) * Math.floor(num(a) / num(b)), anyFloat);
       }
-      if (a.t === 'str') throw new PyError('TypeError', 'not all arguments converted during string formatting');
+      if (a.t === 'str') return V.str(pyPercent(a.v, b.t === 'tuple' ? b.v : b.t === 'dict' ? b : [b]));
       throw unsupported();
     }
     if (op === '**') {
@@ -2986,7 +3023,17 @@ const Py = (() => {
       case 'import': {
         for (const im of s.names) {
           const mod = loadModule(im.mod, ctx);
-          bindName(scope, im.as || im.mod, mod);
+          if (im.as || !im.mod.includes('.')) { bindName(scope, im.as || im.mod, mod); continue; }
+          const parts = im.mod.split('.');
+          const pkg = name => ctx.modules[name] || (MODULES[name] ? loadModule(name, ctx) : (ctx.modules[name] = mkModule(name, {})));
+          const top = pkg(parts[0]);
+          let cur = top;
+          for (let k = 1; k < parts.length; k++) {
+            const sub = k === parts.length - 1 ? mod : pkg(parts.slice(0, k + 1).join('.'));
+            cur.members.set(parts[k], sub);
+            cur = sub;
+          }
+          bindName(scope, parts[0], top);
         }
         ctx.trace.push({ kind: 'step', line: s.line, env: snapshot(scope) });
         return;
@@ -3623,7 +3670,587 @@ const Py = (() => {
     };
     return mkModule('copy', { copy: nat('copy', ([x]) => shallow(x)), deepcopy: nat('deepcopy', ([x]) => deep(x, new Map())) });
   }
-  const MODULES = { copy: makeCopy, argparse: makeArgparse, random: makeRandom, math: makeMath, statistics: makeStatistics, json: makeJson, csv: makeCsv, sys: makeSys, re: makeRe, pytest: makePytest, requests: makeRequests, string: STRING_MOD };
+  /* ---------- datetime: date, datetime and timedelta ----------
+     Calendar maths follows CPython's own datetime.py (proleptic Gregorian ordinals). */
+  const DT_DIM = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  const DT_DBM = (() => { const a = [0, 0]; let t = 0; for (let m = 1; m < 12; m++) { t += DT_DIM[m]; a.push(t); } return a; })();
+  const isLeapYear = y => y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0);
+  const daysIn = (y, m) => (m === 2 && isLeapYear(y) ? 29 : DT_DIM[m]);
+  const daysBeforeYear = y => { y -= 1; return y * 365 + Math.floor(y / 4) - Math.floor(y / 100) + Math.floor(y / 400); };
+  const ymd2ord = (y, m, d) => daysBeforeYear(y) + DT_DBM[m] + (m > 2 && isLeapYear(y) ? 1 : 0) + d;
+  function ord2ymd(n) {
+    n -= 1;
+    const n400 = Math.floor(n / 146097); n %= 146097;
+    let year = n400 * 400 + 1;
+    const n100 = Math.floor(n / 36524); n %= 36524;
+    const n4 = Math.floor(n / 1461); n %= 1461;
+    const n1 = Math.floor(n / 365); n %= 365;
+    year += n100 * 100 + n4 * 4 + n1;
+    if (n1 === 4 || n100 === 4) return [year - 1, 12, 31];
+    const leap = n1 === 3 && (n4 !== 24 || n100 === 3);
+    let month = (n + 50) >> 5;
+    let preceding = DT_DBM[month] + (month > 2 && leap ? 1 : 0);
+    if (preceding > n) { month -= 1; preceding -= DT_DIM[month] + (month === 2 && leap ? 1 : 0); }
+    return [year, month, n - preceding + 1];
+  }
+  const DT_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const DT_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const pad0 = (n, w) => (n < 0 ? '-' + String(-n).padStart(w, '0') : String(n).padStart(w, '0'));
+  function dtStrftime(p, fmtStr) {
+    const ord = ymd2ord(p.y, p.m, p.d), wd = (ord + 6) % 7;
+    return fmtStr.replace(/%(.)/g, (all, c) => {
+      switch (c) {
+        case 'Y': return pad0(p.y, 4);
+        case 'y': return pad0(p.y % 100, 2);
+        case 'm': return pad0(p.m, 2);
+        case 'd': return pad0(p.d, 2);
+        case 'H': return pad0(p.H, 2);
+        case 'I': return pad0(p.H % 12 || 12, 2);
+        case 'M': return pad0(p.Mi, 2);
+        case 'S': return pad0(p.S, 2);
+        case 'f': return pad0(p.us, 6);
+        case 'p': return p.H < 12 ? 'AM' : 'PM';
+        case 'A': return DT_DAYS[wd];
+        case 'a': return DT_DAYS[wd].slice(0, 3);
+        case 'B': return DT_MONTHS[p.m - 1];
+        case 'b': case 'h': return DT_MONTHS[p.m - 1].slice(0, 3);
+        case 'j': return pad0(ord - ymd2ord(p.y, 1, 1) + 1, 3);
+        case 'w': return String((wd + 1) % 7);
+        case 'u': return String(wd + 1);
+        case 'x': return pad0(p.m, 2) + '/' + pad0(p.d, 2) + '/' + pad0(p.y % 100, 2);
+        case 'X': return pad0(p.H, 2) + ':' + pad0(p.Mi, 2) + ':' + pad0(p.S, 2);
+        case 'c': return DT_DAYS[wd].slice(0, 3) + ' ' + DT_MONTHS[p.m - 1].slice(0, 3) + ' ' + String(p.d).padStart(2, ' ') + ' ' + pad0(p.H, 2) + ':' + pad0(p.Mi, 2) + ':' + pad0(p.S, 2) + ' ' + pad0(p.y, 4);
+        case 'Z': case 'z': return '';
+        case '%': return '%';
+        default: return all;
+      }
+    });
+  }
+  function dtStrptime(text, fmtStr) {
+    const spec = { Y: '(\\d{4})', y: '(\\d{2})', m: '(\\d{1,2})', d: '(\\d{1,2})', H: '(\\d{1,2})', I: '(\\d{1,2})', M: '(\\d{1,2})', S: '(\\d{1,2})', f: '(\\d{1,6})', p: '(AM|PM)', j: '(\\d{1,3})',
+      B: '(' + DT_MONTHS.join('|') + ')', b: '(' + DT_MONTHS.map(x => x.slice(0, 3)).join('|') + ')', A: '(' + DT_DAYS.join('|') + ')', a: '(' + DT_DAYS.map(x => x.slice(0, 3)).join('|') + ')' };
+    const order = [];
+    let re = '';
+    for (let i = 0; i < fmtStr.length; i++) {
+      const c = fmtStr[i];
+      if (c === '%' && i + 1 < fmtStr.length) {
+        const k = fmtStr[++i];
+        if (k === '%') re += '%';
+        else if (spec[k]) { re += spec[k]; order.push(k); }
+        else throw new PyError('ValueError', "'" + k + "' is a bad directive in format '" + fmtStr + "'");
+      } else if (/\s/.test(c)) re += '\\s+';
+      else re += c.replace(/[.*+?^$(){}|[\]\\]/g, '\\$&');
+    }
+    const m = new RegExp('^' + re + '$', 'i').exec(text);
+    if (!m) throw new PyError('ValueError', 'time data ' + strRepr(text) + ' does not match format ' + strRepr(fmtStr));
+    const p = { y: 1900, m: 1, d: 1, H: 0, Mi: 0, S: 0, us: 0 };
+    let pm = null;
+    order.forEach((k, i) => {
+      const v = m[i + 1];
+      if (k === 'Y') p.y = +v;
+      else if (k === 'y') p.y = +v < 69 ? 2000 + +v : 1900 + +v;
+      else if (k === 'm') p.m = +v;
+      else if (k === 'd') p.d = +v;
+      else if (k === 'H') p.H = +v;
+      else if (k === 'I') p.H = +v % 12;
+      else if (k === 'M') p.Mi = +v;
+      else if (k === 'S') p.S = +v;
+      else if (k === 'f') p.us = +v.padEnd(6, '0');
+      else if (k === 'p') pm = v.toUpperCase() === 'PM';
+      else if (k === 'B') p.m = DT_MONTHS.findIndex(x => x.toLowerCase() === v.toLowerCase()) + 1;
+      else if (k === 'b') p.m = DT_MONTHS.findIndex(x => x.slice(0, 3).toLowerCase() === v.toLowerCase()) + 1;
+    });
+    if (pm != null) p.H += pm ? 12 : 0;
+    if (p.m < 1 || p.m > 12 || p.d < 1 || p.d > daysIn(p.y, p.m) || p.H > 23 || p.Mi > 59 || p.S > 61) throw new PyError('ValueError', 'unconverted data remains or value out of range: ' + strRepr(text));
+    return p;
+  }
+  function makeDatetime(ctx) {
+    const mk = (cls, fields) => { const o = { t: 'instance', cls, attrs: new Map() }; for (const k in fields) o.attrs.set(k, typeof fields[k] === 'number' ? V.int(fields[k]) : fields[k]); return o; };
+    const iv = (o, k) => num(o.attrs.get(k));
+    const isA = (x, cls) => x && x.t === 'instance' && x.cls.mro.includes(cls);
+    const intArg = (v, what) => { if (!v || (v.t !== 'int' && v.t !== 'bool')) throw new PyError('TypeError', "'" + typeName(v || V.none) + "' object cannot be interpreted as an integer (" + what + ')'); return num(v); };
+    const opt = (args, kw, i, name, def) => (args[i] !== undefined ? args[i] : kw[name] !== undefined ? kw[name] : def);
+    const native = (name, fn) => nat(name, fn);
+    const cm = fn => ({ t: 'classmethod', fn });
+    const cmp = (key) => ({
+      __eq__: native('__eq__', ([a, b]) => (b && b.t === 'instance' && b.cls === a.cls ? V.bool(key(a) === key(b)) : NOTIMPL)),
+      __ne__: native('__ne__', ([a, b]) => (b && b.t === 'instance' && b.cls === a.cls ? V.bool(key(a) !== key(b)) : NOTIMPL)),
+      __lt__: native('__lt__', ([a, b]) => (b && b.t === 'instance' && b.cls === a.cls ? V.bool(key(a) < key(b)) : NOTIMPL)),
+      __le__: native('__le__', ([a, b]) => (b && b.t === 'instance' && b.cls === a.cls ? V.bool(key(a) <= key(b)) : NOTIMPL)),
+      __gt__: native('__gt__', ([a, b]) => (b && b.t === 'instance' && b.cls === a.cls ? V.bool(key(a) > key(b)) : NOTIMPL)),
+      __ge__: native('__ge__', ([a, b]) => (b && b.t === 'instance' && b.cls === a.cls ? V.bool(key(a) >= key(b)) : NOTIMPL)),
+      __hash__: native('__hash__', ([a]) => V.int(key(a) % 2147483647)),
+    });
+    /* timedelta: stored as days, seconds (0..86399) and microseconds (0..999999) */
+    const TD = makeClass('datetime.timedelta', [], {});
+    const tdUs = td => iv(td, 'days') * 86400e6 + iv(td, 'seconds') * 1e6 + iv(td, 'microseconds');
+    const tdFrom = us => {
+      us = Math.round(us);
+      const days = Math.floor(us / 86400e6);
+      const rem = us - days * 86400e6;
+      const secs = Math.floor(rem / 1e6);
+      if (Math.abs(days) > 999999999) throw new PyError('OverflowError', 'days=' + days + '; must have magnitude <= 999999999');
+      return mk(TD, { days, seconds: secs, microseconds: Math.round(rem - secs * 1e6) });
+    };
+    const tdStr = td => {
+      const d = iv(td, 'days'), sec = iv(td, 'seconds'), us = iv(td, 'microseconds');
+      let out = Math.floor(sec / 3600) + ':' + pad0(Math.floor(sec % 3600 / 60), 2) + ':' + pad0(sec % 60, 2);
+      if (us) out += '.' + pad0(us, 6);
+      if (d) out = d + ' day' + (Math.abs(d) !== 1 ? 's' : '') + ', ' + out;
+      return out;
+    };
+    Object.assign(TD.dict, new Map());
+    const tdDict = {
+      __init__: native('__init__', ([self, ...args], kw) => {
+        const names = ['days', 'seconds', 'microseconds', 'milliseconds', 'minutes', 'hours', 'weeks'];
+        for (const k of Object.keys(kw)) if (!names.includes(k)) throw new PyError('TypeError', "'" + k + "' is an invalid keyword argument for __new__()");
+        const g = (i, n) => { const v = opt(args, kw, i, n, V.int(0)); if (!isNum(v)) throw new PyError('TypeError', 'unsupported type for timedelta ' + n + ' component: ' + typeName(v)); return num(v); };
+        const us = ((g(0, 'days') + g(6, 'weeks') * 7) * 86400 + g(1, 'seconds') + g(4, 'minutes') * 60 + g(5, 'hours') * 3600) * 1e6 + g(2, 'microseconds') + g(3, 'milliseconds') * 1000;
+        const t = tdFrom(us);
+        for (const [k, v] of t.attrs) self.attrs.set(k, v);
+        return V.none;
+      }),
+      __str__: native('__str__', ([a]) => V.str(tdStr(a))),
+      __repr__: native('__repr__', ([a]) => {
+        const parts = [['days', iv(a, 'days')], ['seconds', iv(a, 'seconds')], ['microseconds', iv(a, 'microseconds')]].filter(p => p[1]).map(p => p[0] + '=' + p[1]);
+        return V.str('datetime.timedelta(' + (parts.length ? parts.join(', ') : '0') + ')');
+      }),
+      total_seconds: native('total_seconds', ([a]) => V.float(tdUs(a) / 1e6)),
+      __add__: native('__add__', ([a, b]) => (isA(b, TD) ? tdFrom(tdUs(a) + tdUs(b)) : NOTIMPL)),
+      __radd__: native('__radd__', ([a, b]) => (isA(b, TD) ? tdFrom(tdUs(a) + tdUs(b)) : NOTIMPL)),
+      __sub__: native('__sub__', ([a, b]) => (isA(b, TD) ? tdFrom(tdUs(a) - tdUs(b)) : NOTIMPL)),
+      __neg__: native('__neg__', ([a]) => tdFrom(-tdUs(a))),
+      __pos__: native('__pos__', ([a]) => a),
+      __abs__: native('__abs__', ([a]) => tdFrom(Math.abs(tdUs(a)))),
+      __mul__: native('__mul__', ([a, b]) => (isNum(b) ? tdFrom(tdUs(a) * num(b)) : NOTIMPL)),
+      __rmul__: native('__rmul__', ([a, b]) => (isNum(b) ? tdFrom(tdUs(a) * num(b)) : NOTIMPL)),
+      __truediv__: native('__truediv__', ([a, b]) => {
+        if (isA(b, TD)) { if (!tdUs(b)) throw new PyError('ZeroDivisionError', 'division by zero'); return V.float(tdUs(a) / tdUs(b)); }
+        if (isNum(b)) { if (!num(b)) throw new PyError('ZeroDivisionError', 'division by zero'); return tdFrom(tdUs(a) / num(b)); }
+        return NOTIMPL;
+      }),
+      __floordiv__: native('__floordiv__', ([a, b]) => {
+        if (isA(b, TD)) { if (!tdUs(b)) throw new PyError('ZeroDivisionError', 'integer division or modulo by zero'); return V.int(Math.floor(tdUs(a) / tdUs(b))); }
+        if (b.t === 'int') { if (!num(b)) throw new PyError('ZeroDivisionError', 'integer division or modulo by zero'); return tdFrom(Math.floor(tdUs(a) / num(b))); }
+        return NOTIMPL;
+      }),
+      __bool__: native('__bool__', ([a]) => V.bool(tdUs(a) !== 0)),
+      ...cmp(tdUs),
+    };
+    for (const k in tdDict) TD.dict.set(k, tdDict[k]);
+    /* date */
+    const DATE = makeClass('datetime.date', [], {});
+    const checkYMD = (y, m, d) => {
+      if (y < 1 || y > 9999) throw new PyError('ValueError', 'year ' + y + ' is out of range');
+      if (m < 1 || m > 12) throw new PyError('ValueError', 'month must be in 1..12');
+      if (d < 1 || d > daysIn(y, m)) throw new PyError('ValueError', 'day is out of range for month');
+    };
+    const ymdOf = o => [iv(o, 'year'), iv(o, 'month'), iv(o, 'day')];
+    const dateOrd = o => ymd2ord(...ymdOf(o));
+    const dateFromOrd = n => { if (n < 1 || n > 3652059) throw new PyError('OverflowError', 'date value out of range'); const [y, m, d] = ord2ymd(n); return mk(DATE, { year: y, month: m, day: d }); };
+    const isoDate = o => { const [y, m, d] = ymdOf(o); return pad0(y, 4) + '-' + pad0(m, 2) + '-' + pad0(d, 2); };
+    const parts = o => ({ y: iv(o, 'year'), m: iv(o, 'month'), d: iv(o, 'day'), H: o.attrs.has('hour') ? iv(o, 'hour') : 0, Mi: o.attrs.has('minute') ? iv(o, 'minute') : 0, S: o.attrs.has('second') ? iv(o, 'second') : 0, us: o.attrs.has('microsecond') ? iv(o, 'microsecond') : 0 });
+    const today = () => { const n = new Date(); return [n.getFullYear(), n.getMonth() + 1, n.getDate(), n.getHours(), n.getMinutes(), n.getSeconds(), n.getMilliseconds() * 1000]; };
+    const dateDict = {
+      __init__: native('__init__', ([self, ...args], kw) => {
+        const y = intArg(opt(args, kw, 0, 'year'), 'year'), m = intArg(opt(args, kw, 1, 'month'), 'month'), d = intArg(opt(args, kw, 2, 'day'), 'day');
+        checkYMD(y, m, d);
+        self.attrs.set('year', V.int(y)); self.attrs.set('month', V.int(m)); self.attrs.set('day', V.int(d));
+        return V.none;
+      }),
+      __str__: native('__str__', ([a]) => V.str(isoDate(a))),
+      __repr__: native('__repr__', ([a]) => V.str('datetime.date(' + ymdOf(a).join(', ') + ')')),
+      __format__: native('__format__', ([a, spec]) => V.str(spec.v ? dtStrftime(parts(a), spec.v) : fmt(a))),
+      isoformat: native('isoformat', ([a]) => V.str(isoDate(a))),
+      weekday: native('weekday', ([a]) => V.int((dateOrd(a) + 6) % 7)),
+      isoweekday: native('isoweekday', ([a]) => V.int((dateOrd(a) + 6) % 7 + 1)),
+      toordinal: native('toordinal', ([a]) => V.int(dateOrd(a))),
+      strftime: native('strftime', ([a, f]) => { if (!f || f.t !== 'str') throw new PyError('TypeError', 'strftime() argument 1 must be str'); return V.str(dtStrftime(parts(a), f.v)); }),
+      replace: native('replace', ([a], kw) => {
+        const [y, m, d] = ymdOf(a);
+        const ny = kw.year ? num(kw.year) : y, nm = kw.month ? num(kw.month) : m, nd = kw.day ? num(kw.day) : d;
+        checkYMD(ny, nm, nd);
+        return mk(DATE, { year: ny, month: nm, day: nd });
+      }),
+      __add__: native('__add__', ([a, b]) => (isA(b, TD) ? dateFromOrd(dateOrd(a) + iv(b, 'days')) : NOTIMPL)),
+      __radd__: native('__radd__', ([a, b]) => (isA(b, TD) ? dateFromOrd(dateOrd(a) + iv(b, 'days')) : NOTIMPL)),
+      __sub__: native('__sub__', ([a, b]) => {
+        if (isA(b, TD)) return dateFromOrd(dateOrd(a) - iv(b, 'days'));
+        if (b && b.t === 'instance' && b.cls === DATE) return tdFrom((dateOrd(a) - dateOrd(b)) * 86400e6);
+        return NOTIMPL;
+      }),
+      today: cm(native('today', () => { const [y, m, d] = today(); return mk(DATE, { year: y, month: m, day: d }); })),
+      fromordinal: cm(native('fromordinal', ([c, n]) => dateFromOrd(intArg(n, 'ordinal')))),
+      fromisoformat: cm(native('fromisoformat', ([c, t]) => {
+        const m = t && t.t === 'str' ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(t.v) : null;
+        if (!m) throw new PyError('ValueError', 'Invalid isoformat string: ' + (t ? repr(t) : "''"));
+        checkYMD(+m[1], +m[2], +m[3]);
+        return mk(DATE, { year: +m[1], month: +m[2], day: +m[3] });
+      })),
+      ...cmp(dateOrd),
+    };
+    for (const k in dateDict) DATE.dict.set(k, dateDict[k]);
+    /* datetime: a date plus a time of day */
+    const DT = makeClass('datetime.datetime', [DATE], {});
+    const dtUs = o => dateOrd(o) * 86400e6 + iv(o, 'hour') * 3600e6 + iv(o, 'minute') * 60e6 + iv(o, 'second') * 1e6 + iv(o, 'microsecond');
+    const dtFromUs = us => {
+      const ord = Math.floor(us / 86400e6);
+      let rem = us - ord * 86400e6;
+      const [y, m, d] = ord2ymd(ord);
+      const H = Math.floor(rem / 3600e6); rem -= H * 3600e6;
+      const Mi = Math.floor(rem / 60e6); rem -= Mi * 60e6;
+      const S = Math.floor(rem / 1e6);
+      return mk(DT, { year: y, month: m, day: d, hour: H, minute: Mi, second: S, microsecond: Math.round(rem - S * 1e6) });
+    };
+    const isoTime = o => pad0(iv(o, 'hour'), 2) + ':' + pad0(iv(o, 'minute'), 2) + ':' + pad0(iv(o, 'second'), 2) + (iv(o, 'microsecond') ? '.' + pad0(iv(o, 'microsecond'), 6) : '');
+    const fromParts = p => { checkYMD(p.y, p.m, p.d); return mk(DT, { year: p.y, month: p.m, day: p.d, hour: p.H, minute: p.Mi, second: p.S, microsecond: p.us }); };
+    const dtDict = {
+      __init__: native('__init__', ([self, ...args], kw) => {
+        const y = intArg(opt(args, kw, 0, 'year'), 'year'), m = intArg(opt(args, kw, 1, 'month'), 'month'), d = intArg(opt(args, kw, 2, 'day'), 'day');
+        checkYMD(y, m, d);
+        const H = num(opt(args, kw, 3, 'hour', V.int(0))), Mi = num(opt(args, kw, 4, 'minute', V.int(0))), S = num(opt(args, kw, 5, 'second', V.int(0))), us = num(opt(args, kw, 6, 'microsecond', V.int(0)));
+        if (H < 0 || H > 23) throw new PyError('ValueError', 'hour must be in 0..23');
+        if (Mi < 0 || Mi > 59) throw new PyError('ValueError', 'minute must be in 0..59');
+        if (S < 0 || S > 59) throw new PyError('ValueError', 'second must be in 0..59');
+        for (const [k, v] of [['year', y], ['month', m], ['day', d], ['hour', H], ['minute', Mi], ['second', S], ['microsecond', us]]) self.attrs.set(k, V.int(v));
+        return V.none;
+      }),
+      __str__: native('__str__', ([a]) => V.str(isoDate(a) + ' ' + isoTime(a))),
+      __repr__: native('__repr__', ([a]) => {
+        const xs = [iv(a, 'year'), iv(a, 'month'), iv(a, 'day'), iv(a, 'hour'), iv(a, 'minute')];
+        if (iv(a, 'second') || iv(a, 'microsecond')) xs.push(iv(a, 'second'));
+        if (iv(a, 'microsecond')) xs.push(iv(a, 'microsecond'));
+        return V.str('datetime.datetime(' + xs.join(', ') + ')');
+      }),
+      isoformat: native('isoformat', ([a, sep], kw) => V.str(isoDate(a) + (sep ? sep.v : kw.sep ? kw.sep.v : 'T') + isoTime(a))),
+      date: native('date', ([a]) => mk(DATE, { year: iv(a, 'year'), month: iv(a, 'month'), day: iv(a, 'day') })),
+      replace: native('replace', ([a], kw) => {
+        const p = parts(a);
+        const g = (k, cur) => (kw[k] ? num(kw[k]) : cur);
+        return fromParts({ y: g('year', p.y), m: g('month', p.m), d: g('day', p.d), H: g('hour', p.H), Mi: g('minute', p.Mi), S: g('second', p.S), us: g('microsecond', p.us) });
+      }),
+      __add__: native('__add__', ([a, b]) => (isA(b, TD) ? dtFromUs(dtUs(a) + tdUs(b)) : NOTIMPL)),
+      __radd__: native('__radd__', ([a, b]) => (isA(b, TD) ? dtFromUs(dtUs(a) + tdUs(b)) : NOTIMPL)),
+      __sub__: native('__sub__', ([a, b]) => {
+        if (isA(b, TD)) return dtFromUs(dtUs(a) - tdUs(b));
+        if (b && b.t === 'instance' && b.cls === DT) return tdFrom(dtUs(a) - dtUs(b));
+        return NOTIMPL;
+      }),
+      now: cm(native('now', () => { const [y, m, d, H, Mi, S, us] = today(); return fromParts({ y, m, d, H, Mi, S, us }); })),
+      today: cm(native('today', () => { const [y, m, d, H, Mi, S, us] = today(); return fromParts({ y, m, d, H, Mi, S, us }); })),
+      strptime: cm(native('strptime', ([c, t, f]) => {
+        if (!t || t.t !== 'str' || !f || f.t !== 'str') throw new PyError('TypeError', 'strptime() argument 1 must be str');
+        return fromParts(dtStrptime(t.v, f.v));
+      })),
+      fromisoformat: cm(native('fromisoformat', ([c, t]) => {
+        const m = t && t.t === 'str' ? /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(t.v) : null;
+        if (!m) throw new PyError('ValueError', 'Invalid isoformat string: ' + (t ? repr(t) : "''"));
+        return fromParts({ y: +m[1], m: +m[2], d: +m[3], H: +(m[4] || 0), Mi: +(m[5] || 0), S: +(m[6] || 0), us: 0 });
+      })),
+      ...cmp(dtUs),
+    };
+    for (const k in dtDict) DT.dict.set(k, dtDict[k]);
+    return mkModule('datetime', { date: DATE, datetime: DT, timedelta: TD, MINYEAR: V.int(1), MAXYEAR: V.int(9999) });
+  }
+  /* ---------- the virtual disk: folders, os, os.path, shutil and pathlib ----------
+     Paths use "/" like Linux and macOS. Folders live in ctx.dirs; files in ctx.fs. */
+  function normPath(p) {
+    const parts = [];
+    for (const seg of String(p).replace(/\\/g, '/').split('/')) {
+      if (seg === '' || seg === '.') continue;
+      if (seg === '..') { if (parts.length && parts[parts.length - 1] !== '..') parts.pop(); else parts.push('..'); continue; }
+      parts.push(seg);
+    }
+    return parts.length ? parts.join('/') : '.';
+  }
+  const parentPath = p => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '.');
+  const baseName = p => (p === '.' ? '' : p.slice(p.lastIndexOf('/') + 1));
+  const isDirPath = (ctx, p) => p === '.' || (ctx.dirs && ctx.dirs.has(p));
+  function childrenOf(ctx, d) {
+    const out = new Set();
+    const pre = d === '.' ? '' : d + '/';
+    for (const k of [...ctx.fs.keys(), ...ctx.dirs]) if (k !== d && k.startsWith(pre)) { const rest = k.slice(pre.length); if (rest && !rest.includes('/')) out.add(rest); }
+    return [...out].sort();
+  }
+  const joinUnder = (d, name) => (d === '.' ? name : d + '/' + name);
+  function fsPathOf(v) {
+    if (v && v.t === 'str') return v.v;
+    if (v && v.t === 'instance' && v.attrs.has('_path')) return v.attrs.get('_path').v;
+    throw new PyError('TypeError', `expected str, bytes or os.PathLike object, not ${typeName(v || V.none)}`);
+  }
+  const noFile = (shown, code = 2, what = 'No such file or directory') => new PyError(code === 2 ? 'FileNotFoundError' : code === 17 ? 'FileExistsError' : code === 20 ? 'NotADirectoryError' : code === 21 ? 'IsADirectoryError' : 'OSError', `[Errno ${code}] ${what}: ${strRepr(shown)}`);
+  function fsMkdir(ctx, shown, parents, existOk) {
+    const p = normPath(shown);
+    if (isDirPath(ctx, p) || ctx.fs.has(p)) { if (existOk && isDirPath(ctx, p)) return; throw noFile(shown, 17, 'File exists'); }
+    if (!isDirPath(ctx, parentPath(p))) {
+      if (!parents) throw noFile(shown);
+      fsMkdir(ctx, parentPath(p), true, true);
+    }
+    ctx.dirs.add(p);
+  }
+  function fsRemoveFile(ctx, shown) {
+    const p = normPath(shown);
+    if (!ctx.fs.has(p)) throw isDirPath(ctx, p) ? noFile(shown, 21, 'Is a directory') : noFile(shown);
+    ctx.fs.delete(p);
+    ctx.emit({ kind: 'file', name: p, text: null });
+  }
+  function fsMove(ctx, from, to) {
+    const a = normPath(from), b = normPath(to);
+    if (ctx.fs.has(a)) {
+      if (!isDirPath(ctx, parentPath(b))) throw noFile(to);
+      const text = ctx.fs.get(a);
+      ctx.fs.delete(a); ctx.emit({ kind: 'file', name: a, text: null });
+      ctx.fs.set(b, text); ctx.emit({ kind: 'file', name: b, text });
+      return;
+    }
+    if (!isDirPath(ctx, a) || a === '.') throw noFile(from);
+    for (const d of [...ctx.dirs]) if (d === a || d.startsWith(a + '/')) { ctx.dirs.delete(d); ctx.dirs.add(b + d.slice(a.length)); }
+    for (const [k, v] of [...ctx.fs]) if (k.startsWith(a + '/')) { ctx.fs.delete(k); ctx.emit({ kind: 'file', name: k, text: null }); const nk = b + k.slice(a.length); ctx.fs.set(nk, v); ctx.emit({ kind: 'file', name: nk, text: v }); }
+  }
+  function osPathJoin(parts) {
+    let out = '';
+    for (const p of parts) {
+      if (p.startsWith('/')) out = p;
+      else if (!out || out.endsWith('/')) out += p;
+      else out += '/' + p;
+    }
+    return out;
+  }
+  function splitExt(p) {
+    const base = p.slice(p.lastIndexOf('/') + 1);
+    const dot = base.lastIndexOf('.');
+    if (dot <= 0 || /^\.+$/.test(base.slice(0, dot + 1))) return [p, ''];
+    return [p.slice(0, p.length - base.length + dot), base.slice(dot)];
+  }
+  function makeOs(ctx) {
+    const str = (args, i, name) => { if (!args[i]) throw new PyError('TypeError', `${name}() missing required argument`); return fsPathOf(args[i]); };
+    const pathMod = mkModule('posixpath', {
+      join: nat('join', args => { if (!args.length) throw new PyError('TypeError', 'join() missing 1 required positional argument'); return V.str(osPathJoin(args.map(fsPathOf))); }),
+      exists: nat('exists', ([p]) => { const k = normPath(fsPathOf(p)); return V.bool(ctx.fs.has(k) || isDirPath(ctx, k)); }),
+      isfile: nat('isfile', ([p]) => V.bool(ctx.fs.has(normPath(fsPathOf(p))))),
+      isdir: nat('isdir', ([p]) => V.bool(isDirPath(ctx, normPath(fsPathOf(p))))),
+      basename: nat('basename', ([p]) => { const t = fsPathOf(p); return V.str(t.slice(t.lastIndexOf('/') + 1)); }),
+      dirname: nat('dirname', ([p]) => { const t = fsPathOf(p); const i = t.lastIndexOf('/'); return V.str(i < 0 ? '' : i === 0 ? '/' : t.slice(0, i).replace(/\/+$/, '') || '/'); }),
+      split: nat('split', ([p]) => { const t = fsPathOf(p); const i = t.lastIndexOf('/'); return V.tuple([V.str(i < 0 ? '' : t.slice(0, i) || '/'), V.str(t.slice(i + 1))]); }),
+      splitext: nat('splitext', ([p]) => V.tuple(splitExt(fsPathOf(p)).map(V.str))),
+      getsize: nat('getsize', ([p]) => { const t = fsPathOf(p), k = normPath(t); if (!ctx.fs.has(k)) throw noFile(t); return V.int(new TextEncoder().encode(ctx.fs.get(k)).length); }),
+      normpath: nat('normpath', ([p]) => V.str(normPath(fsPathOf(p)))),
+      sep: V.str('/'),
+    });
+    return mkModule('os', {
+      path: pathMod,
+      sep: V.str('/'),
+      getcwd: nat('getcwd', () => V.str('/home/mage/spells')),
+      listdir: nat('listdir', args => {
+        const t = args[0] ? fsPathOf(args[0]) : '.', p = normPath(t);
+        if (ctx.fs.has(p)) throw noFile(t, 20, 'Not a directory');
+        if (!isDirPath(ctx, p)) throw noFile(t);
+        return V.list(childrenOf(ctx, p).map(V.str));
+      }),
+      mkdir: nat('mkdir', args => { fsMkdir(ctx, str(args, 0, 'mkdir'), false, false); return V.none; }),
+      makedirs: nat('makedirs', (args, kw) => { const ok = (args[2] || kw.exist_ok) && truthy(args[2] || kw.exist_ok); fsMkdir(ctx, str(args, 0, 'makedirs'), true, ok); return V.none; }),
+      remove: nat('remove', args => { fsRemoveFile(ctx, str(args, 0, 'remove')); return V.none; }),
+      unlink: nat('unlink', args => { fsRemoveFile(ctx, str(args, 0, 'unlink')); return V.none; }),
+      rmdir: nat('rmdir', args => {
+        const t = str(args, 0, 'rmdir'), p = normPath(t);
+        if (!isDirPath(ctx, p) || p === '.') throw noFile(t);
+        if (childrenOf(ctx, p).length) throw noFile(t, 39, 'Directory not empty');
+        ctx.dirs.delete(p);
+        return V.none;
+      }),
+      rename: nat('rename', args => { fsMove(ctx, str(args, 0, 'rename'), str(args, 1, 'rename')); return V.none; }),
+      walk: nat('walk', args => {
+        const top = args[0] ? fsPathOf(args[0]) : '.';
+        const out = [];
+        const visit = shownDir => {
+          const p = normPath(shownDir);
+          if (!isDirPath(ctx, p)) return;
+          const kids = childrenOf(ctx, p);
+          const dirs = kids.filter(k => isDirPath(ctx, joinUnder(p, k))), files = kids.filter(k => ctx.fs.has(joinUnder(p, k)));
+          out.push(V.tuple([V.str(shownDir), V.list(dirs.map(V.str)), V.list(files.map(V.str))]));
+          for (const d of dirs) visit(osPathJoin([shownDir, d]));
+        };
+        visit(top);
+        let i = 0;
+        return mkIter('generator', () => (i < out.length ? out[i++] : DONE));
+      }),
+    });
+  }
+  function makeShutil(ctx) {
+    const copyFile = (src, dst) => {
+      const a = normPath(src);
+      if (!ctx.fs.has(a)) throw noFile(src);
+      let target = dst, b = normPath(dst);
+      if (isDirPath(ctx, b)) { target = osPathJoin([dst, baseName(a)]); b = normPath(target); }
+      if (!isDirPath(ctx, parentPath(b))) throw noFile(dst);
+      const text = ctx.fs.get(a);
+      ctx.fs.set(b, text);
+      ctx.emit({ kind: 'file', name: b, text });
+      return V.str(target);
+    };
+    return mkModule('shutil', {
+      copy: nat('copy', ([a, b]) => copyFile(fsPathOf(a), fsPathOf(b))),
+      copyfile: nat('copyfile', ([a, b]) => { if (isDirPath(ctx, normPath(fsPathOf(b)))) throw noFile(fsPathOf(b), 21, 'Is a directory'); return copyFile(fsPathOf(a), fsPathOf(b)); }),
+      move: nat('move', ([a, b]) => {
+        const src = fsPathOf(a), dst = fsPathOf(b);
+        let target = dst;
+        if (isDirPath(ctx, normPath(dst))) target = osPathJoin([dst, baseName(normPath(src))]);
+        fsMove(ctx, src, target);
+        return V.str(target);
+      }),
+      rmtree: nat('rmtree', ([a]) => {
+        const t = fsPathOf(a), p = normPath(t);
+        if (!isDirPath(ctx, p) || p === '.') throw noFile(t);
+        for (const d of [...ctx.dirs]) if (d === p || d.startsWith(p + '/')) ctx.dirs.delete(d);
+        for (const k of [...ctx.fs.keys()]) if (k.startsWith(p + '/')) { ctx.fs.delete(k); ctx.emit({ kind: 'file', name: k, text: null }); }
+        return V.none;
+      }),
+      copytree: nat('copytree', ([a, b]) => {
+        const src = normPath(fsPathOf(a)), dst = normPath(fsPathOf(b));
+        if (!isDirPath(ctx, src)) throw noFile(fsPathOf(a));
+        if (isDirPath(ctx, dst) || ctx.fs.has(dst)) throw noFile(fsPathOf(b), 17, 'File exists');
+        fsMkdir(ctx, dst, true, false);
+        for (const d of [...ctx.dirs]) if (d.startsWith(src + '/')) ctx.dirs.add(dst + d.slice(src.length));
+        for (const [k, v] of [...ctx.fs]) if (k.startsWith(src + '/')) { const nk = dst + k.slice(src.length); ctx.fs.set(nk, v); ctx.emit({ kind: 'file', name: nk, text: v }); }
+        return V.str(fsPathOf(b));
+      }),
+    });
+  }
+  function makePathlib(ctx) {
+    const P = makeClass('PosixPath', [], {});
+    const mkP = p => ({ t: 'instance', cls: P, attrs: new Map([['_path', V.str(p)]]) });
+    const pv = o => o.attrs.get('_path').v;
+    const prop = fn => ({ t: 'property', fget: nat('get', ([o]) => fn(o)), fset: null });
+    const isP = x => x && x.t === 'instance' && x.cls === P;
+    const joinP = (a, b) => (b.startsWith('/') ? normPath(b) : a === '.' ? normPath(b) : normPath(a + '/' + b));
+    const globRe = pat => new RegExp('^' + pat.split('/').map(seg => (seg === '**' ? '\u0000' : seg.replace(/[.+^$(){}|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]'))).join('/').replace(/\u0000\//g, '(?:.*/)?').replace(/\u0000/g, '.*') + '$');
+    const allUnder = d => { const pre = d === '.' ? '' : d + '/'; return [...ctx.fs.keys(), ...ctx.dirs].filter(k => k !== d && k.startsWith(pre)).map(k => k.slice(pre.length)); };
+    const dict = {
+      __init__: nat('__init__', ([self, ...parts]) => {
+        let p = '.';
+        for (const part of parts) p = joinP(p, fsPathOf(part));
+        self.attrs.set('_path', V.str(p));
+        return V.none;
+      }),
+      __str__: nat('__str__', ([o]) => V.str(pv(o))),
+      __fspath__: nat('__fspath__', ([o]) => V.str(pv(o))),
+      __repr__: nat('__repr__', ([o]) => V.str(`PosixPath(${strRepr(pv(o))})`)),
+      __truediv__: nat('__truediv__', ([o, b]) => (b.t === 'str' || isP(b) ? mkP(joinP(pv(o), fsPathOf(b))) : NOTIMPL)),
+      __rtruediv__: nat('__rtruediv__', ([o, b]) => (b.t === 'str' ? mkP(joinP(normPath(b.v), pv(o))) : NOTIMPL)),
+      __eq__: nat('__eq__', ([o, b]) => (isP(b) ? V.bool(pv(o) === pv(b)) : NOTIMPL)),
+      __lt__: nat('__lt__', ([o, b]) => (isP(b) ? V.bool(pv(o) < pv(b)) : NOTIMPL)),
+      __hash__: nat('__hash__', ([o]) => V.int([...pv(o)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 2147483647, 7))),
+      name: prop(o => V.str(baseName(pv(o)))),
+      suffix: prop(o => V.str(splitExt(baseName(pv(o)))[1])),
+      stem: prop(o => V.str(splitExt(baseName(pv(o)))[0])),
+      parent: prop(o => mkP(parentPath(pv(o)))),
+      parts: prop(o => V.tuple(pv(o) === '.' ? [] : pv(o).split('/').map(V.str))),
+      exists: nat('exists', ([o]) => V.bool(ctx.fs.has(pv(o)) || isDirPath(ctx, pv(o)))),
+      is_file: nat('is_file', ([o]) => V.bool(ctx.fs.has(pv(o)))),
+      is_dir: nat('is_dir', ([o]) => V.bool(isDirPath(ctx, pv(o)))),
+      read_text: nat('read_text', ([o]) => { if (!ctx.fs.has(pv(o))) throw isDirPath(ctx, pv(o)) ? noFile(pv(o), 21, 'Is a directory') : noFile(pv(o)); return V.str(ctx.fs.get(pv(o))); }),
+      write_text: nat('write_text', ([o, data]) => {
+        if (!data || data.t !== 'str') throw new PyError('TypeError', `data must be str, not ${typeName(data || V.none)}`);
+        if (!isDirPath(ctx, parentPath(pv(o)))) throw noFile(pv(o));
+        ctx.fs.set(pv(o), data.v);
+        ctx.emit({ kind: 'file', name: pv(o), text: data.v });
+        return V.int(data.v.length);
+      }),
+      touch: nat('touch', ([o]) => { if (!ctx.fs.has(pv(o))) { if (!isDirPath(ctx, parentPath(pv(o)))) throw noFile(pv(o)); ctx.fs.set(pv(o), ''); ctx.emit({ kind: 'file', name: pv(o), text: '' }); } return V.none; }),
+      mkdir: nat('mkdir', ([o, ...args], kw) => { const flag = (i, n) => { const v = args[i] || kw[n]; return !!v && truthy(v); }; fsMkdir(ctx, pv(o), flag(1, 'parents'), flag(2, 'exist_ok')); return V.none; }),
+      unlink: nat('unlink', ([o], kw) => { if (!ctx.fs.has(pv(o)) && kw.missing_ok && truthy(kw.missing_ok)) return V.none; fsRemoveFile(ctx, pv(o)); return V.none; }),
+      rmdir: nat('rmdir', ([o]) => { if (!isDirPath(ctx, pv(o))) throw noFile(pv(o)); if (childrenOf(ctx, pv(o)).length) throw noFile(pv(o), 39, 'Directory not empty'); ctx.dirs.delete(pv(o)); return V.none; }),
+      rename: nat('rename', ([o, t]) => { const to = normPath(fsPathOf(t)); fsMove(ctx, pv(o), to); return mkP(to); }),
+      iterdir: nat('iterdir', ([o]) => {
+        if (!isDirPath(ctx, pv(o))) throw noFile(pv(o));
+        const kids = childrenOf(ctx, pv(o)).map(k => mkP(joinUnder(pv(o), k)));
+        let i = 0;
+        return mkIter('generator', () => (i < kids.length ? kids[i++] : DONE));
+      }),
+      glob: nat('glob', ([o, pat]) => {
+        const re = globRe(fsPathOf(pat));
+        const hits = allUnder(pv(o)).filter(r => re.test(r)).sort().map(r => mkP(joinUnder(pv(o), r)));
+        let i = 0;
+        return mkIter('generator', () => (i < hits.length ? hits[i++] : DONE));
+      }),
+      rglob: nat('rglob', ([o, pat]) => {
+        const re = globRe('**/' + fsPathOf(pat));
+        const hits = allUnder(pv(o)).filter(r => re.test(r)).sort().map(r => mkP(joinUnder(pv(o), r)));
+        let i = 0;
+        return mkIter('generator', () => (i < hits.length ? hits[i++] : DONE));
+      }),
+      with_suffix: nat('with_suffix', ([o, suf]) => { const [stem] = splitExt(pv(o)); return mkP(stem + fsPathOf(suf)); }),
+      with_name: nat('with_name', ([o, n]) => mkP(joinUnder(parentPath(pv(o)), fsPathOf(n)))),
+      with_stem: nat('with_stem', ([o, n]) => mkP(joinUnder(parentPath(pv(o)), fsPathOf(n) + splitExt(baseName(pv(o)))[1]))),
+      joinpath: nat('joinpath', ([o, ...ps]) => { let p = pv(o); for (const x of ps) p = joinP(p, fsPathOf(x)); return mkP(p); }),
+      open: nat('open', ([o, ...args], kw) => openFile([V.str(pv(o)), ...args], kw, ctx)),
+      cwd: { t: 'classmethod', fn: nat('cwd', () => mkP('.')) },
+    };
+    for (const k in dict) P.dict.set(k, dict[k]);
+    return mkModule('pathlib', { Path: P, PosixPath: P, PurePath: P });
+  }
+  /* ---------- logging ---------- */
+  function makeLogging(ctx) {
+    const LEVELS = { DEBUG: 10, INFO: 20, WARNING: 30, ERROR: 40, CRITICAL: 50 };
+    const NAMES = { 10: 'DEBUG', 20: 'INFO', 30: 'WARNING', 40: 'ERROR', 50: 'CRITICAL' };
+    const state = { configured: false, level: 30, format: '%(levelname)s:%(name)s:%(message)s', file: null, disabled: 0 };
+    const loggers = new Map();
+    const render = (format, rec) => format.replace(/%\((\w+)\)([-#0 +]?\d*(?:\.\d+)?[sdif])/g, (all, key, spec) => {
+      const v = rec[key];
+      if (v === undefined) throw new PyError('KeyError', strRepr(key));
+      return pyPercent('%' + spec, [typeof v === 'number' ? V.int(v) : V.str(String(v))]);
+    });
+    const emitRecord = (logger, levelno, msgV, args, auto) => {
+      if (levelno <= state.disabled) return;
+      if (!state.configured && auto) state.configured = true;
+      const lastResort = !state.configured;
+      const eff = logger.level || (lastResort ? 30 : state.level);
+      if (levelno < eff) return;
+      let message = fmt(msgV);
+      if (args.length) message = pyPercent(message, args.length === 1 && args[0].t === 'tuple' ? args[0].v : args);
+      const line = lastResort ? message : render(state.format, { levelname: NAMES[levelno] || 'Level ' + levelno, levelno, name: logger.name, message, asctime: '2026-01-01 12:00:00,000', module: 'spell', funcName: '<module>' });
+      if (state.file) {
+        const prev = ctx.fs.get(state.file) || '';
+        ctx.fs.set(state.file, prev + line + '\n');
+        ctx.emit({ kind: 'file', name: state.file, text: prev + line + '\n' });
+      } else ctx.emit({ kind: 'print', text: line, raw: line + '\n', log: true });
+    };
+    const methods = (logger, auto) => {
+      const out = {};
+      for (const [k, lv] of [['debug', 10], ['info', 20], ['warning', 30], ['warn', 30], ['error', 40], ['critical', 50], ['exception', 40]]) out[k] = nat(k, ([msg, ...args]) => { if (!msg) throw new PyError('TypeError', k + '() missing 1 required positional argument: \'msg\''); emitRecord(logger, lv, msg, args, auto); return V.none; });
+      out.log = nat('log', ([lv, msg, ...args]) => { emitRecord(logger, num(lv), msg, args); return V.none; });
+      out.setLevel = nat('setLevel', ([lv]) => { logger.level = lv.t === 'str' ? LEVELS[lv.v] : num(lv); return V.none; });
+      return out;
+    };
+    const root = { name: 'root', level: 0 };
+    const getLogger = nat('getLogger', ([n]) => {
+      const name = !n || n.t === 'NoneType' ? 'root' : fmt(n);
+      if (name === 'root') return mkObj('Logger', { name: V.str('root'), ...methods(root) });
+      if (!loggers.has(name)) { const lg = { name, level: 0 }; loggers.set(name, mkObj('Logger', { name: V.str(name), ...methods(lg) })); }
+      return loggers.get(name);
+    });
+    return mkModule('logging', {
+      ...Object.fromEntries(Object.entries(LEVELS).map(([k, v]) => [k, V.int(v)])),
+      WARN: V.int(30), NOTSET: V.int(0),
+      basicConfig: nat('basicConfig', (args, kw) => {
+        if (state.configured && !(kw.force && truthy(kw.force))) return V.none;
+        state.configured = true;
+        if (kw.level) state.level = kw.level.t === 'str' ? LEVELS[kw.level.v] : num(kw.level);
+        if (kw.format) state.format = fmt(kw.format);
+        if (kw.filename) {
+          state.file = normPath(fsPathOf(kw.filename));
+          const mode = kw.filemode ? fmt(kw.filemode) : 'a';
+          if (mode === 'w' || !ctx.fs.has(state.file)) { ctx.fs.set(state.file, ''); ctx.emit({ kind: 'file', name: state.file, text: '' }); }
+        }
+        return V.none;
+      }),
+      disable: nat('disable', ([lv]) => { state.disabled = lv ? num(lv) : 50; return V.none; }),
+      getLogger,
+      getLevelName: nat('getLevelName', ([lv]) => (lv.t === 'str' ? (LEVELS[lv.v] ? V.int(LEVELS[lv.v]) : V.str('Level ' + lv.v)) : V.str(NAMES[num(lv)] || 'Level ' + num(lv)))),
+      ...methods(root, true),
+    });
+  }
+  const MODULES = { copy: makeCopy, datetime: makeDatetime, logging: makeLogging, pathlib: makePathlib, os: makeOs, 'os.path': ctx => makeOs(ctx).members.get('path'), shutil: makeShutil, argparse: makeArgparse, random: makeRandom, math: makeMath, statistics: makeStatistics, json: makeJson, csv: makeCsv, sys: makeSys, re: makeRe, pytest: makePytest, requests: makeRequests, string: STRING_MOD };
   function loadModule(name, ctx) {
     if (ctx.modules[name]) return ctx.modules[name];
     if (ctx.userModules && ctx.userModules[name]) return (ctx.modules[name] = runUserModule(name, ctx));
@@ -3649,7 +4276,9 @@ const Py = (() => {
   function run(rawLines, opts = {}) {
     const lines = rawLines.map(normalize);
     const ctx = newCtx();
-    ctx.fs = new Map(Object.entries(opts.files || {}));
+    ctx.fs = new Map(Object.entries(opts.files || {}).map(([k, v]) => [normPath(k), v]));
+    ctx.dirs = new Set();
+    for (const k of ctx.fs.keys()) for (let p = parentPath(k); p !== '.'; p = parentPath(p)) ctx.dirs.add(p);
     ctx.seed = opts.seed == null ? 2026 : opts.seed;
     ctx.argv = opts.argv;
     ctx.input = (opts.input || []).slice();

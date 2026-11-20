@@ -1,6 +1,6 @@
 # Runs spell programs in real CPython so tools/diff-python.js can compare them
 # with the game's interpreter. Reads JSON from argv[1], writes JSON to argv[2].
-import io, json, os, random, sys, tempfile, contextlib, shutil
+import io, json, os, random, sys, tempfile, contextlib, shutil, logging, warnings
 
 def run_one(p):
     tmp = tempfile.mkdtemp(prefix='spell_')
@@ -21,7 +21,9 @@ def run_one(p):
     err = None
     try:
         for name, text in (p.get('files') or {}).items():
-            with open(os.path.join(tmp, name), 'w', newline='') as f:
+            full = os.path.join(tmp, *name.split('/'))
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, 'w', newline='') as f:
                 f.write(text)
         os.chdir(tmp)
         sys.path.insert(0, tmp)
@@ -37,7 +39,12 @@ def run_one(p):
                 if steps[0] > 20000:
                     raise TimeoutError('spell ran too long')
             return tracer
-        with contextlib.redirect_stdout(out):
+        # log lines go to stderr in real Python; the game shows them with the output
+        logging.root.handlers.clear()
+        logging.root.setLevel(logging.WARNING)
+        logging.disable(logging.NOTSET)
+        warnings.simplefilter('ignore')
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
             sys.settrace(tracer)
             try:
                 code = compile('\n'.join(p['code']) + '\n', 'spell.py', 'exec')
@@ -54,13 +61,21 @@ def run_one(p):
         if sys.path and sys.path[0] == tmp:
             sys.path.pop(0)
     files = {}
-    for name in os.listdir(tmp):
-        fp = os.path.join(tmp, name)
-        if os.path.isfile(fp) and not name.endswith('.pyc'):
+    for root, dirs, names in os.walk(tmp):
+        dirs[:] = [d for d in dirs if d != '__pycache__']
+        for name in names:
+            if name.endswith('.pyc'):
+                continue
+            fp = os.path.join(root, name)
+            rel = os.path.relpath(fp, tmp).replace(os.sep, '/')
             with open(fp, newline='') as f:
-                files[name] = f.read()
+                files[rel] = f.read()
     shutil.rmtree(tmp, ignore_errors=True)
     text = out.getvalue()
+    # the game uses "/" in paths like Linux and macOS; Windows Python prints "\\"
+    code_text = '\n'.join(p['code'])
+    if 'os' in code_text or 'pathlib' in code_text or 'shutil' in code_text:
+        text = text.replace('\\\\', '/').replace('\\', '/')
     lines = text.split('\n')
     if lines and lines[-1] == '':
         lines.pop()
