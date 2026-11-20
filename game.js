@@ -13,7 +13,7 @@
   const SAVE_KEY = 'script-sorcery-v1';
   const DEFAULT_HERO = { name: 'Pip', hair: 1, skin: 1, robe: 0, hat: 1, gem: 0, hatStyle: 'wizard', pet: 'none' };
   const DEFAULT_SETTINGS = { mute: false, music: true, sfx: true, musicVol: 0.6, sfxVol: 0.8, vibrate: true };
-  function freshSave() { return { hero: null, done: {}, xp: 0, gold: 0, streak: 0, lastDay: null, settings: { ...DEFAULT_SETTINGS }, world: 0, arenaBest: 0, towerBest: 0, weak: {}, hard: {}, mode: 'normal', owned: { hats: ['wizard', 'none'], pets: ['none'] } }; }
+  function freshSave() { return { hero: null, done: {}, xp: 0, gold: 0, streak: 0, lastDay: null, settings: { ...DEFAULT_SETTINGS }, world: 0, arenaBest: 0, towerBest: 0, daily: null, weak: {}, hard: {}, mode: 'normal', owned: { hats: ['wizard', 'none'], pets: ['none'] } }; }
   function loadSave() {
     let s = null;
     try { s = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { /* storage blocked */ }
@@ -1013,10 +1013,10 @@
     renderHearts();
     next();
   }
-  $('#lv-exit').onclick = () => { if (L && L.busy) return; if (L && L.tower && L.floor > 1) { towerOver(); return; } L = null; show('map'); };
+  $('#lv-exit').onclick = () => { if (L && L.busy) return; if (L && L.tower && !L.choosing && L.floor > 1) { towerOver(); return; } L = null; show('map'); };
 
   function renderDots() {
-    if (L.tower) { $('#lv-dots').innerHTML = `<span class="arena-hud">Floor ${L.floor} · best ${save.towerBest || 0}</span>`; return; }
+    if (L.tower) { $('#lv-dots').innerHTML = `<span class="arena-hud">${towerHud()}</span>`; return; }
     const n = L.def.steps.length;
     let h = '';
     for (let k = 0; k < n; k++) h += `<span class="dot${k < L.idx ? ' done' : k === L.idx ? ' on' : ''}"></span>`;
@@ -1062,7 +1062,7 @@
     const raw = L.def.steps[L.idx];
     // a fresh variant every time: new values, new wrong choices, new order
     const replay = !!save.done[L.def.id];
-    const st = reuse || Engine.instantiate(raw, { R, hero: save.hero.name, foe: foeCtx(), weak: save.weak, hard: L.hard, remix: L.tower ? 0.6 : L.hard ? 0.75 : replay ? 0.55 : 0.25 });
+    const st = reuse || Engine.instantiate(raw, { R, hero: save.hero.name, foe: foeCtx(), weak: save.weak, hard: L.hard, remix: L.tower ? (L.remix != null ? L.remix : 0.6) : L.hard ? 0.75 : replay ? 0.55 : 0.25 });
     L.st = st;
     L.stepFails = 0;
     if (st.spawn) setRight({ ...st.spawn });
@@ -1512,7 +1512,7 @@
     const res = await playback(lines);
     let ok = goalMet(st, res);
     let msg = ok ? null : failMsg(st, res);
-    if (ok && st.require) { const r = st.require(F.slots); if (r) { ok = false; msg = r; } }
+    if (ok && st.require) { const r = st.require(F.slots, st.vars || {}); if (r) { ok = false; msg = r; } }
     if (ok) { F.solved = true; renderFill(st); L.busy = false; onSuccess(praise()); return; }
     if (await onFail(msg)) return;
     if (L.stepFails >= 2) {
@@ -1709,7 +1709,7 @@
     const res = await playback(program);
     let ok = goalMet(st, res);
     let msg = ok ? null : failMsg(st, res);
-    if (ok && st.require) { const r = st.require(user); if (r) { ok = false; msg = r; } }
+    if (ok && st.require) { const r = st.require(user, st.vars || {}); if (r) { ok = false; msg = r; } }
     if (ok) { L.busy = false; onSuccess(praise()); return; }
     if (await onFail(msg)) return;
     renderCode(st.starter);
@@ -1894,70 +1894,163 @@
     nb.focus();
   }
 
-  /* ================= the endless tower =================
-     Every floor is a monster and one question, drawn from the levels you have beaten.
-     The higher you climb, the later the worlds it draws from. Weak spots come up more. */
+  /* ================= the tower =================
+     Two climbs. Daily: 20 floors, a new tower every day (seeded by the date), so today's
+     order of topics is a surprise but stays the same if you try again today.
+     Endless: as high as you can go, different every time.
+     Both pick questions by DIFFICULTY, not by world. Every question gets a score (the kind of
+     task, how long its code is, how deep in the course it sits); the scores are ranked 0..1
+     and each floor draws from a band that rises as you climb. So floor 3 might be a loop,
+     floor 4 a class, floor 5 a string, but floor 15 is always harder than floor 5.
+     The same world never comes twice within three floors. On top of that, higher floors
+     twist the question: remixed formats more often, typed answers, hints only after 2 misses. */
   const TOWER_FOES = ['slime', 'bat', 'inkling', 'fireslime', 'iceslime', 'wisp', 'echobat', 'crystalslime', 'mimic', 'goblin', 'crab', 'seaslime', 'golem', 'skeleton', 'ghost', 'bookworm', 'paperbat', 'sparkbot', 'knight', 'gearbot', 'bandit', 'serpent', 'bugswarm', 'sprite', 'wurm', 'riverspirit'];
   const TOWER_GUARDS = ['treant', 'goblinking', 'kraken', 'colossus', 'lich', 'archivist', 'wyrm', 'dragon', 'hydra', 'clockking', 'sandtitan', 'leviathan'];
+  const DAILY_FLOORS = 20;
+  const TIERS = [['Apprentice', 0], ['Adept', 0.2], ['Mage', 0.4], ['Archmage', 0.6], ['Legend', 0.8]];
+  const KIND_COST = { predict: 0, review: 1, fill: 1.3, fix: 1.6, write: 2.6 };
+  function tierOf(t) { let k = 0; TIERS.forEach(([, at], i) => { if (t >= at - 1e-9) k = i; }); return TIERS[k][0]; }
+  function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  function towerStepOk(s) {
+    if (!['predict', 'fill', 'fix', 'write', 'review'].includes(s.type)) return false;
+    if (s.measure === 'damage' || s.spawn || (s.goal && (s.goal.foeDown || s.goal.foeAtMost != null))) return false;
+    if (s.vars && s.vars.length >= 2) return false;
+    if (/\$HP|\{HP\}/.test(JSON.stringify(s.text || ''))) return false;
+    return true;
+  }
+  function codeLines(s) {
+    const len = c => Array.isArray(c) ? c.length : 0;
+    return len(s.code) || len(s.solution) || len(s.starter) || 6;
+  }
+  function stepCost(s) { return (KIND_COST[s.type] || 0) + Math.min(3, codeLines(s) / 4); }
   function towerPool() {
     const pool = [];
-    WORLDS.forEach((w, wi) => w.levels.forEach(lv => {
+    const maxW = Math.max(1, WORLDS.length - 1);
+    WORLDS.forEach((w, wi) => w.levels.forEach((lv, li) => {
       if (!save.done[lv.id]) return;
       lv.steps.forEach(raw => {
-        if (!['predict', 'fill', 'fix', 'write', 'review'].includes(raw.type)) return;
-        if (raw.measure === 'damage' || raw.spawn || (raw.goal && (raw.goal.foeDown || raw.goal.foeAtMost != null))) return;
-        if (raw.vars && raw.vars.length >= 2) return;
-        if (/\$HP|\{HP\}/.test(JSON.stringify(raw.text || ''))) return;
-        pool.push({ raw, wi, tags: lv.tags, review: raw.type === 'review' });
+        const vs = raw.oneOf ? raw.oneOf.map(o => ({ ...raw, ...o })) : [raw];
+        if (!vs.length || !vs.every(towerStepOk)) return;
+        const cost = vs.reduce((t, s) => t + stepCost(s), 0) / vs.length;
+        const score = cost + 2.2 * wi / maxW + 0.8 * li / Math.max(1, w.levels.length - 1) + (lv.boss ? 0.6 : 0);
+        pool.push({ raw, wi, id: lv.id, tags: lv.tags, score });
       });
     }));
+    // rank the scores, so every pool spans the whole climb however far you have got
+    pool.slice().sort((x, y) => x.score - y.score).forEach((p, i, arr) => { p.p = arr.length > 1 ? i / (arr.length - 1) : 0; });
     return pool;
+  }
+  // one question for difficulty t (0 = floor 1, 1 = the top)
+  function towerPick(pool, t, rand, used, avoidWorlds, weightFn) {
+    let lo = t - 0.14, hi = t + 0.06, cands = [];
+    for (let widen = 0; widen < 8 && cands.length < 6; widen++, lo -= 0.06, hi += 0.04)
+      cands = pool.filter(p => p.p >= lo && p.p <= hi && !used.has(p.raw) && !avoidWorlds.includes(p.wi));
+    if (!cands.length) cands = pool.filter(p => !avoidWorlds.includes(p.wi));
+    if (!cands.length) cands = pool;
+    // lean toward the top of the band, so it keeps climbing
+    const w = p => (0.15 + Math.max(0, p.p - lo)) * (weightFn ? weightFn(p) : 1);
+    let r = rand() * cands.reduce((s, p) => s + w(p), 0);
+    for (const p of cands) { r -= w(p); if (r < 0) return p; }
+    return cands[cands.length - 1];
+  }
+  // the twist on top of the question itself; works for any topic
+  function towerTwist(t, guard, rand) {
+    const typed = t >= 0.3 && rand() < Math.min(0.9, (t - 0.25) * 1.4 + (guard ? 0.3 : 0));
+    return { remix: Math.min(0.85, 0.25 + 0.6 * t), hard: typed };
+  }
+  function recentWorlds(worlds, pool) {
+    const n = Math.min(3, new Set(pool.map(p => p.wi)).size - 1);
+    return n > 0 ? worlds.slice(-n) : [];
+  }
+  function dailyPlan(pool, day) {
+    const D = Engine.makeR(hashStr('tower:' + (day || today())));
+    const used = new Set(), worlds = [], plan = [];
+    for (let f = 1; f <= DAILY_FLOORS; f++) {
+      const t = (f - 1) / (DAILY_FLOORS - 1), guard = f % 5 === 0;
+      const pick = towerPick(pool, guard ? Math.min(1, t + 0.08) : t, D.rand, used, recentWorlds(worlds, pool));
+      used.add(pick.raw);
+      worlds.push(pick.wi);
+      plan.push({ pick, t, guard, ...towerTwist(t, guard, D.rand) });
+    }
+    return plan;
+  }
+  function dailyState() {
+    const d = save.daily || {};
+    if (d.day !== today()) save.daily = { day: today(), best: 0, cleared: false, streak: d.streak || 0, lastClear: d.lastClear || null };
+    const s = save.daily;
+    if (s.lastClear !== today() && s.lastClear !== today(-1)) s.streak = 0;
+    return s;
+  }
+  function floorGold(f, guard) { return guard ? 15 + f : 4 + Math.round(f / 3); }
+  function towerHud() {
+    if (L.choosing) return 'Choose your climb';
+    const tier = L.cur ? ' · ' + tierOf(L.cur.t) : '';
+    return L.daily ? 'Daily ' + L.floor + '/' + DAILY_FLOORS + tier + ' · best ' + (dailyState().best || 0)
+      : 'Floor ' + L.floor + tier + ' · best ' + (save.towerBest || 0);
   }
   function startTower() {
     if (!save.hero) return;
     const pool = towerPool();
     if (pool.length < 5) { toast('Beat a few more levels to open the Tower.'); return; }
     const hp0 = 3 + heartBonus(heroLevel());
-    L = { tower: true, def: { id: 'tower', mentor: 'oracle', tags: [], steps: [], learn: [] }, pool, floor: 1, idx: -1, fails: 0, busy: false, hearts: hp0, maxHearts: hp0, gold: 0, ward: hasWard(heroLevel()) };
+    L = { tower: true, choosing: true, def: { id: 'tower', mentor: 'oracle', tags: [], steps: [], learn: [] }, pool, floor: 1, idx: -1, fails: 0, busy: false, hearts: hp0, maxHearts: hp0, gold: 0, ward: hasWard(heroLevel()), used: new Set(), worlds: [] };
     scene.bg = 'stairs';
     scene.fx = [];
     scene.heroFlash = 0; scene.heroGlow = 0; scene.shake = 0;
-    $('#lv-title').textContent = 'The Endless Tower';
+    $('#lv-title').textContent = 'The Tower';
     $('#result').hidden = true;
     $('#faint').hidden = true;
     $('#bubble').hidden = true;
     show('level');
-    towerSpawn();
+    setRight(null);
     renderHearts();
     renderDots();
-    say('oracle', `Oracle Vey here. Every floor of this tower holds one monster and one question from the worlds you have walked. Answer true and climb. Three wrong answers and you are out. Your best: floor ${save.towerBest || 0}.`);
+    const d = dailyState();
+    say('oracle', 'Oracle Vey here. Two climbs. The Daily Tower is ' + DAILY_FLOORS + ' floors and changes every day: the topics come in any order, but every floor is harder than the one before. The Endless Tower works the same way and never ends. Three wrong answers and you are out.');
     $('#book').hidden = true;
-    $('#ctrl').innerHTML = '';
     $('#editor').hidden = true;
     renderShelf(null);
     setHint(null);
-    setMain('Climb', () => { sfx('tap'); towerNext(); });
+    const daily = d.cleared ? 'Cleared today! Climb again for practice. New tower tomorrow.'
+      : d.best ? 'Today: floor ' + d.best + ' of ' + DAILY_FLOORS + '. Gold only for new floors.' : 'Today: not climbed yet.';
+    $('#ctrl').innerHTML = '<div class="tower-info px"><p><b>Daily Tower</b> · ' + esc(daily) + (d.streak ? ' Clear streak: ' + d.streak + ' day' + (d.streak === 1 ? '' : 's') + '.' : '') + '</p>'
+      + '<p><b>Endless Tower</b> · best floor ' + (save.towerBest || 0) + '.</p>'
+      + '<button class="btn ghost" id="tw-endless">Endless climb</button></div>';
+    $('#tw-endless').onclick = () => { if (L && !L.busy) { sfx('tap'); beginClimb(false); } };
+    setMain('Daily climb', () => { sfx('tap'); beginClimb(true); });
+  }
+  function beginClimb(daily) {
+    const d = dailyState();
+    Object.assign(L, { choosing: false, daily, floor: 1, idx: -1, used: new Set(), worlds: [], gold: 0, startBest: daily ? d.best : 0, plan: daily ? dailyPlan(L.pool) : null });
+    $('#lv-title').textContent = daily ? 'Daily Tower' : 'The Endless Tower';
+    $('#ctrl').innerHTML = '';
+    towerSpawn();
+    towerNext();
   }
   function towerSpawn() {
     const guard = L.floor % 5 === 0;
-    const kind = guard ? TOWER_GUARDS[(L.floor / 5 - 1) % TOWER_GUARDS.length] : TOWER_FOES[(L.floor - 1) % TOWER_FOES.length];
+    const kind = guard ? TOWER_GUARDS[(L.floor / 5 - 1 + (L.daily ? hashStr(today()) : 0)) % TOWER_GUARDS.length] : TOWER_FOES[(L.floor - 1 + (L.daily ? hashStr(today()) : 0)) % TOWER_FOES.length];
     setRight({ kind, hp: 10 + L.floor * 3 + (guard ? 20 : 0), tint: kind === 'wisp' ? pick(['fire', 'ice', 'water']) : '' });
     L.guard = guard;
   }
   function towerNext() {
     if (!scene.right || scene.right.type !== 'foe' || scene.right.hp <= 0) { if (L.idx >= 0) { L.floor++; } towerSpawn(); }
-    // deeper floors reach later worlds
-    const maxW = Math.max(...L.pool.map(p => p.wi));
-    const reach = Math.min(maxW, Math.floor(maxW * Math.min(1, (L.floor + 3) / 24)));
-    let cands = L.pool.filter(p => p.wi <= reach && p.wi >= Math.max(0, reach - 4));
-    if (L.guard) { const hardOnes = cands.filter(p => p.raw.type === 'write' || p.raw.type === 'fill'); if (hardOnes.length) cands = hardOnes; }
-    if (!cands.length) cands = L.pool;
-    const weight = p => 1 + p.tags.reduce((a, t) => a + Math.min(4, (save.weak || {})[t] || 0), 0) + (L.recent && L.recent.includes(p.raw) ? -0.9 : 0);
-    let r = Math.random() * cands.reduce((a, p) => a + weight(p), 0), chosen = cands[0];
-    for (const p of cands) { r -= weight(p); if (r < 0) { chosen = p; break; } }
-    L.recent = [...(L.recent || []).slice(-12), chosen.raw];
-    L.def.steps.push(chosen.raw);
-    L.def.tags = chosen.tags;
+    let f;
+    if (L.daily) f = L.plan[Math.min(L.floor, DAILY_FLOORS) - 1];
+    else {
+      const t = 1 - Math.exp(-(L.floor - 1) / 16), guard = L.floor % 5 === 0;
+      const weak = p => 1 + 0.5 * p.tags.reduce((a, tg) => a + Math.min(4, (save.weak || {})[tg] || 0), 0);
+      const pk = towerPick(L.pool, guard ? Math.min(1, t + 0.08) : t, Math.random, L.used, recentWorlds(L.worlds, L.pool), weak);
+      L.used.add(pk.raw);
+      if (L.used.size > L.pool.length * 0.6) L.used.clear();
+      f = { pick: pk, t, guard, ...towerTwist(t, guard, Math.random) };
+    }
+    L.worlds.push(f.pick.wi);
+    L.cur = f;
+    L.hard = f.hard;
+    L.remix = f.remix;
+    L.def.steps.push(f.pick.raw);
+    L.def.tags = f.pick.tags;
     L.idx = L.def.steps.length - 1;
     L.hintIdx = 0;
     runStep();
@@ -1967,30 +2060,59 @@
     L.busy = true;
     sfx('ok');
     if (scene.right && scene.right.type === 'foe' && scene.right.hp > 0) await castFx(pick(['fireball', 'spark', 'icebolt']), scene.right.hp, L.guard ? 'Guardian down!' : '');
-    const gain = L.guard ? 15 : 4;
-    L.gold += gain;
-    save.towerBest = Math.max(save.towerBest || 0, L.floor);
+    let note;
+    if (L.daily) {
+      const d = dailyState();
+      if (L.floor > L.startBest) { const gain = floorGold(L.floor, L.guard); L.gold += gain; note = '+' + gain + ' gold.'; }
+      else note = 'You cleared this floor earlier today, so no gold.';
+      d.best = Math.max(d.best || 0, L.floor);
+    } else {
+      const gain = L.guard ? 15 : 4;
+      L.gold += gain;
+      note = '+' + gain + ' gold.';
+      save.towerBest = Math.max(save.towerBest || 0, L.floor);
+    }
     persist();
-    mentorSay(`${text} Floor ${L.floor} cleared. +${gain} gold.`, 'good');
+    const top = L.daily && L.floor >= DAILY_FLOORS;
+    mentorSay(top ? text + ' That was the top floor! ' + note : text + ' Floor ' + L.floor + ' cleared. ' + note, 'good');
     setHint(null);
     L.busy = false;
     renderDots();
-    setMain('Next floor', () => { sfx('tap'); towerNext(); });
+    if (top) setMain('Claim the top', () => { sfx('tap'); towerOver(); });
+    else setMain('Next floor', () => { sfx('tap'); towerNext(); });
   }
   function towerOver() {
     const reached = L.floor - (scene.right && scene.right.hp > 0 ? 1 : 0);
-    const best = Math.max(save.towerBest || 0, reached);
-    const isBest = reached > (save.towerBest || 0);
-    save.towerBest = best;
-    const xp = reached * 8;
+    let xp, isBest, best, bonus = '';
+    if (L.daily) {
+      const d = dailyState();
+      const fresh = Math.max(0, reached - L.startBest);
+      isBest = fresh > 0;
+      d.best = Math.max(d.best || 0, reached);
+      best = d.best;
+      xp = fresh * 12;
+      if (reached >= DAILY_FLOORS && !d.cleared) {
+        d.cleared = true;
+        d.streak = d.lastClear === today(-1) ? (d.streak || 0) + 1 : 1;
+        d.lastClear = today();
+        L.gold += 80; xp += 150;
+        bonus = ' Daily Tower cleared! +80 gold bonus. Clear streak: ' + d.streak + '.';
+      }
+    } else {
+      isBest = reached > (save.towerBest || 0);
+      best = Math.max(save.towerBest || 0, reached);
+      save.towerBest = best;
+      xp = reached * 8;
+    }
     const gain = grant(xp, L.gold);
     if (reached > 0) bumpStreak();
     persist();
     sfx(isBest && reached > 0 ? 'win' : 'bad');
     $('#faint').hidden = true;
-    $('#res-title').textContent = 'The climb is over';
+    $('#res-title').textContent = L.daily && reached >= DAILY_FLOORS ? 'Top of the tower!' : 'The climb is over';
     $('#res-stars').hidden = true;
-    $('#res-note').textContent = `You cleared ${reached} floor${reached === 1 ? '' : 's'}. ${isBest && reached > 0 ? 'New best!' : `Best: floor ${best}.`}`;
+    $('#res-note').textContent = 'You cleared ' + reached + ' floor' + (reached === 1 ? '' : 's') + (L.daily ? ' of ' + DAILY_FLOORS : '') + '. '
+      + (isBest && reached > 0 ? (L.daily ? 'Best today!' : 'New best!') : (L.daily ? 'Best today: floor ' + best + '.' : 'Best: floor ' + best + '.')) + bonus;
     $('#res-xp').textContent = '+' + xp;
     Sound.music(null);
     $('#res-gold').textContent = '+' + gain.gold;
@@ -2057,6 +2179,6 @@
   /* ---------------- boot ---------------- */
   $('#talk').onclick = () => { if (L && !L.arena && L.st && L.st.type === 'talk' && !L.busy) { sfx('tap'); next(); } };
   // test hook for the local auto-player: http://localhost:5252/?debug
-  if (/[?&]debug/.test(location.search)) window.__game = { L: () => L, startLevel, startTower, save: () => save, persist };
+  if (/[?&]debug/.test(location.search)) window.__game = { L: () => L, startLevel, startTower, beginClimb, towerPool, dailyPlan, tierOf, save: () => save, persist };
   show('title');
 })();
