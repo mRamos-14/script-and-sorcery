@@ -78,7 +78,7 @@ with fresh values every play.
 | 49 | The Alchemist's Tools | functools: reduce, partial, lru_cache (+ R) | ours | ✅ |
 
 ## Act IX · Mastery
-| 50 | The Gauntlet | capstone projects: arithmetic formatter, budget app, text adventure, grade book | Py4E, fCC, ours | 🔨 |
+| 50 | The Gauntlet | capstone projects: arithmetic formatter, budget app, text adventure, grade book | Py4E, fCC, ours | ✅ |
 | 51 | The Heart of Code | the final trial: everything | all | 🔨 |
 
 ## Build order
