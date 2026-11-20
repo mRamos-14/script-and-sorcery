@@ -2,7 +2,9 @@
 const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..');
 const m = { exports: {} };
-new Function('module', fs.readFileSync(path.join(root, 'py.js'), 'utf8') + fs.readFileSync(path.join(root, 'arena.js'), 'utf8') + ';module.exports={Py,Arena};')(m);
+const FILES = ['py.js', 'arena.js', 'engine.js', 'levels.js', ...fs.readdirSync(root).filter(f => /^world\d+\.js$/.test(f)).sort((a, b) => parseInt(a.slice(5)) - parseInt(b.slice(5)))];
+// world files add their own question pools, so load them too
+new Function('module', FILES.map(f => fs.readFileSync(path.join(root, f), 'utf8').replace("if (typeof module !== 'undefined') module.exports = Engine;", '')).join('\n') + ';module.exports={Py,Arena};')(m);
 const { Py, Arena } = m.exports;
 let bad = 0;
 for (const [tag, gen] of Object.entries(Arena.GEN)) {

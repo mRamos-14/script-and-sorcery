@@ -234,6 +234,13 @@
     gatekeeper: { name: 'The Gatekeeper', map: SPRITES.source, s: 4, fly: true, pal: { O: '#3a2a04', C: '#f0c53a', L: '#fff1a8', W: '#ffffff', K: '#1b1830', Y: '#7d4fc9' } },
     grimoire: { name: 'The Grimoire', map: BOOK_MAP, s: 4, fly: true, pal: { O: OUT, P: '#d9c79a', W: '#f6ead2', K: '#1b1830', R: '#ff5f6d', M: '#3a2a14', C: '#7d4fc9' } },
   };
+  // mentors and monsters that newer world files bring along (EXTRA in levels.js)
+  for (const [k, v] of Object.entries(EXTRA.npcs)) NPCS[k] = { name: v.name, map: SAGE_MAP, pal: sagePal(...v.colors) };
+  for (const [k, v] of Object.entries(EXTRA.foes)) {
+    const base = FOES[v.base];
+    if (!base) throw new Error('unknown foe base ' + v.base);
+    FOES[k] = { ...base, name: v.name, s: v.s || base.s, crown: !!v.crown, pal: { ...base.pal, ...(v.pal || {}) } };
+  }
   const SPELL_COL = { fireball: ['#ff7a2b', '#ffd75f'], spark: ['#ffe65f', '#ffffff'], icebolt: ['#7fdcff', '#e8fbff'] };
 
   function heroPal(h) {

@@ -25,15 +25,15 @@ const Py = (() => {
   const dict = () => ({ t: 'dict', v: new Map() });
 
   const SPELLS = ['fireball', 'spark', 'icebolt'];
-  const BUILTINS = ['print', 'len', 'cast', 'range', 'sum', 'max', 'min', 'sorted', 'abs', 'round', 'enumerate', 'open', 'input', 'isinstance', 'issubclass', 'hasattr', 'getattr', 'setattr', 'iter', 'next', 'zip', 'map', 'filter', 'any', 'all', 'reversed', 'chr', 'ord', 'divmod', 'pow', 'super', 'property', 'classmethod', 'staticmethod', 'callable', 'repr', 'vars'];
+  const BUILTINS = ['format', 'bin', 'hex', 'oct', 'print', 'len', 'cast', 'range', 'sum', 'max', 'min', 'sorted', 'abs', 'round', 'enumerate', 'open', 'input', 'isinstance', 'issubclass', 'hasattr', 'getattr', 'setattr', 'iter', 'next', 'zip', 'map', 'filter', 'any', 'all', 'reversed', 'chr', 'ord', 'divmod', 'pow', 'super', 'property', 'classmethod', 'staticmethod', 'callable', 'repr', 'vars'];
   // names that are classes in Python: calling them converts, type() returns them
-  const TYPES = ['int', 'str', 'float', 'bool', 'list', 'tuple', 'dict', 'set', 'type', 'object'];
+  const TYPES = ['int', 'str', 'float', 'bool', 'list', 'tuple', 'dict', 'set', 'frozenset', 'type', 'object'];
   const EXC = ['BaseException', 'Exception', 'ValueError', 'TypeError', 'NameError', 'IndexError', 'KeyError', 'ZeroDivisionError', 'AttributeError', 'RecursionError', 'ArithmeticError', 'LookupError', 'RuntimeError', 'UnboundLocalError', 'OSError', 'FileNotFoundError', 'UnsupportedOperation', 'AssertionError', 'StopIteration', 'ImportError', 'ModuleNotFoundError', 'SystemExit', 'EOFError', 'NotImplementedError', 'PatternError', 'JSONDecodeError', 'OverflowError', 'StatisticsError', 'Failed', 'ConnectionError'];
   const EXC_PARENT = { Exception: 'BaseException', SystemExit: 'BaseException', ZeroDivisionError: 'ArithmeticError', OverflowError: 'ArithmeticError', IndexError: 'LookupError', KeyError: 'LookupError', RecursionError: 'RuntimeError', NotImplementedError: 'RuntimeError', UnboundLocalError: 'NameError', FileNotFoundError: 'OSError', UnsupportedOperation: 'OSError', ModuleNotFoundError: 'ImportError', JSONDecodeError: 'ValueError', StatisticsError: 'ValueError', Failed: 'BaseException', ConnectionError: 'OSError' };
   const excParent = c => (c === 'BaseException' ? null : EXC_PARENT[c] || 'Exception');
   const KEYWORDS = ['if', 'elif', 'else', 'and', 'or', 'not', 'in', 'is', 'True', 'False', 'None', 'for', 'while', 'def', 'return', 'class', 'import', 'from', 'pass', 'break', 'continue', 'lambda', 'with', 'try', 'except', 'finally', 'raise', 'del', 'as', 'global', 'nonlocal', 'yield', 'assert'];
   const LATER = [];
-  const STR_METHODS = ['upper', 'lower', 'title', 'capitalize', 'strip', 'lstrip', 'rstrip', 'replace', 'count', 'find', 'rfind', 'index', 'startswith', 'endswith', 'isdigit', 'isalpha', 'isalnum', 'isupper', 'islower', 'isspace', 'isnumeric', 'split', 'rsplit', 'join', 'splitlines', 'center', 'ljust', 'rjust', 'zfill', 'removeprefix', 'removesuffix', 'partition', 'swapcase', 'casefold', 'format'];
+  const STR_METHODS = ['upper', 'lower', 'title', 'capitalize', 'strip', 'lstrip', 'rstrip', 'replace', 'count', 'find', 'rfind', 'index', 'rindex', 'startswith', 'endswith', 'isdigit', 'isalpha', 'isalnum', 'isupper', 'islower', 'isspace', 'isnumeric', 'split', 'rsplit', 'join', 'splitlines', 'center', 'ljust', 'rjust', 'zfill', 'removeprefix', 'removesuffix', 'partition', 'swapcase', 'casefold', 'format'];
   const FILE_METHODS = ['read', 'readline', 'readlines', 'write', 'close'];
   const LIST_METHODS = ['append', 'extend', 'insert', 'pop', 'remove', 'index', 'count', 'sort', 'reverse', 'clear', 'copy'];
   const DICT_METHODS = ['get', 'keys', 'values', 'items', 'pop', 'update', 'clear', 'copy', 'setdefault', 'popitem'];
@@ -78,8 +78,9 @@ const Py = (() => {
     return objName(x);
   }
   function setRepr(x) {
-    if (!x.v.size) return x.t === 'frozenset' ? 'frozenset()' : 'set()';
-    return '{' + setOrder(x, true).map(repr).join(', ') + '}';
+    if (!x.v.size) return x.frozen ? 'frozenset()' : 'set()';
+    const body = '{' + setOrder(x, true).map(repr).join(', ') + '}';
+    return x.frozen ? `frozenset(${body})` : body;
   }
   function repr(x) {
     switch (x.t) {
@@ -135,7 +136,7 @@ const Py = (() => {
     }
   }
   function show(x) { return x.t === 'str' ? `"${x.v}"` : repr(x); }
-  const typeName = x => (x.t === 'exctype' || x.t === 'class' ? 'type' : x.t === 'exception' ? x.cls : x.t === 'file' ? '_io.TextIOWrapper' : x.t === 'instance' ? x.cls.name : x.t === 'builtin' || x.t === 'native' ? 'builtin_function_or_method' : x.t === 'boundmethod' ? 'method' : x.t === 'match' ? 're.Match' : x.t === 'iterator' ? x.kind : x.t);
+  const typeName = x => (x.t === 'set' && x.frozen ? 'frozenset' : x.t === 'exctype' || x.t === 'class' ? 'type' : x.t === 'exception' ? x.cls : x.t === 'file' ? '_io.TextIOWrapper' : x.t === 'instance' ? x.cls.name : x.t === 'builtin' || x.t === 'native' ? 'builtin_function_or_method' : x.t === 'boundmethod' ? 'method' : x.t === 'match' ? 're.Match' : x.t === 'iterator' ? x.kind : x.t);
 
   /* ---------- tokens ---------- */
   const OPS3 = ['**=', '//=', '...'];
@@ -934,11 +935,32 @@ const Py = (() => {
   }
 
   /* ---------- program structure ---------- */
+  // split a line at top-level semicolons (outside strings and brackets)
+  function splitSemis(src) {
+    if (!src.includes(';')) return [src];
+    const parts = [];
+    let q = null, depth = 0, start = 0;
+    for (let k = 0; k < src.length; k++) {
+      const c = src[k];
+      if (q) { if (c === '\\') k++; else if (c === q) q = null; continue; }
+      if (c === '"' || c === "'") q = c;
+      else if (c === '#') break;
+      else if ('([{'.includes(c)) depth++;
+      else if (')]}'.includes(c)) depth--;
+      else if (c === ';' && depth === 0) { parts.push(src.slice(start, k)); start = k + 1; }
+    }
+    if (!parts.length) return [src];
+    parts.push(src.slice(start));
+    const ind = src.match(/^ */)[0];
+    // compound headers like "if x: a; b" keep their inline body whole
+    if (/^\s*(if|elif|else|for|while|def|class|with|try|except|finally|match|case)\b/.test(parts[0])) return [src];
+    return parts.map((p, n) => (n ? ind + p.trim() : p.replace(/\s+$/, ''))).filter(p => p.trim());
+  }
   function compile(lines) {
     const items = [];
     lines.forEach((src, i) => {
       if (!src.trim() || /^\s*#/.test(src)) return;
-      items.push({ i, indent: src.match(/^ */)[0].length, src });
+      for (const part of splitSemis(src)) items.push({ i, indent: part.match(/^ */)[0].length, src: part });
     });
     let pos = 0;
     const parse = it => makeParser(tokenize(it.src, it.i + 1), it.i + 1).statement();
@@ -1126,6 +1148,7 @@ const Py = (() => {
         return 'o:' + oid(x);
       }
       case 'class': case 'function': case 'builtin': case 'native': case 'module': case 'boundmethod': return 'o:' + oid(x);
+      case 'set': if (x.frozen) return 'f:{' + [...x.v.keys()].sort().join(',') + '}'; throw new PyError('TypeError', "unhashable type: 'set'");
       default: throw new PyError('TypeError', `unhashable type: '${typeName(x)}'`);
     }
   }
@@ -1502,6 +1525,7 @@ const Py = (() => {
         if (obj.attrs.has(name)) return obj.attrs.get(name);
         if (ca) return fromClass(ca, obj, obj.cls);
         if (obj.cls.exc && name === 'args') return V.tuple(obj.args);
+        if (obj.cls.exc && name === '__cause__') return obj.cause || V.none;
         const ga = classAttr(obj.cls, '__getattr__');
         if (ga) return userCall(ga, [obj, V.str(name)]);
         throw new PyError('AttributeError', `'${obj.cls.name}' object has no attribute '${name}'`);
@@ -1552,6 +1576,7 @@ const Py = (() => {
         break;
       case 'exception':
         if (name === 'args') return V.tuple(obj.args || (obj.msg === '' ? [] : [V.str(obj.msg)]));
+        if (name === '__cause__') return obj.cause || V.none;
         break;
       case 'type':
         if (name === '__name__') return V.str(obj.v);
@@ -1568,7 +1593,7 @@ const Py = (() => {
         if (obj.attrs.has(name)) return obj.attrs.get(name);
         break;
     }
-    const table = { str: STR_METHODS, list: LIST_METHODS, dict: DICT_METHODS, file: FILE_METHODS, set: SET_METHODS }[obj.t];
+    const table = { str: STR_METHODS, list: LIST_METHODS, tuple: ['count', 'index'], dict: DICT_METHODS, file: FILE_METHODS, set: SET_METHODS }[obj.t];
     if (table && table.includes(name)) return { t: 'method', v: name, on: obj.t, obj };
     throw none();
   }
@@ -1692,6 +1717,13 @@ const Py = (() => {
   }
 
   function callMethod(obj, name, args, kw, ctx) {
+    if (obj.t === 'tuple' && (name === 'count' || name === 'index')) {
+      noKw(name, kw); argCount(name, args, 1);
+      if (name === 'count') return V.int(obj.v.filter(x => equal(x, args[0])).length);
+      const i = obj.v.findIndex(x => equal(x, args[0]));
+      if (i < 0) throw new PyError('ValueError', 'tuple.index(x): x not in tuple');
+      return V.int(i);
+    }
     if (!['str', 'list', 'dict', 'file', 'set'].includes(obj.t)) return callValue(getAttr(obj, name, ctx), args, kw, ctx);
     if (obj.t === 'file') {
       if (!FILE_METHODS.includes(name)) throw new PyError('AttributeError', `'_io.TextIOWrapper' object has no attribute '${name}'`);
@@ -1736,10 +1768,19 @@ const Py = (() => {
           if (n < 0 || n >= parts.length - 1) return V.str(parts.join(args[1].v));
           return V.str(parts.slice(0, n + 1).join(args[1].v) + args[0].v + parts.slice(n + 1).join(args[0].v));
         }
-        case 'count': argCount(name, args, 1); needStr('count', args[0]); return V.int(args[0].v === '' ? s.length + 1 : s.split(args[0].v).length - 1);
-        case 'find': argCount(name, args, 1); needStr('find', args[0]); return V.int(s.indexOf(args[0].v));
-        case 'rfind': argCount(name, args, 1); needStr('rfind', args[0]); return V.int(s.lastIndexOf(args[0].v));
-        case 'index': { argCount(name, args, 1); needStr('index', args[0]); const i = s.indexOf(args[0].v); if (i < 0) throw new PyError('ValueError', 'substring not found'); return V.int(i); }
+        case 'count': case 'find': case 'rfind': case 'index': case 'rindex': {
+          argCount(name, args, 1, 3); needStr(name, args[0]);
+          const L = s.length, opt = k => (args[k] && args[k].t !== 'NoneType' ? needInt(args[k]) : null);
+          let a = opt(1), b = opt(2);
+          a = a == null ? 0 : a < 0 ? Math.max(0, a + L) : a;
+          b = b == null ? L : b < 0 ? Math.max(0, b + L) : Math.min(b, L);
+          const sub = args[0].v;
+          if (name === 'count') { if (a > L || a > b) return V.int(0); const part = s.slice(a, b); return V.int(sub === '' ? part.length + 1 : part.split(sub).length - 1); }
+          let i = -1;
+          if (a <= L && a <= b) { const part = s.slice(a, b); const j = name[0] === 'r' ? part.lastIndexOf(sub) : part.indexOf(sub); i = j < 0 ? -1 : j + a; }
+          if (i < 0 && name.endsWith('index')) throw new PyError('ValueError', 'substring not found');
+          return V.int(i);
+        }
         case 'startswith': case 'endswith': {
           argCount(name, args, 1);
           const opts = args[0].t === 'tuple' ? args[0].v : [args[0]];
@@ -1875,6 +1916,7 @@ const Py = (() => {
       }
     }
     if (obj.t === 'set') {
+      if (obj.frozen && ['add', 'remove', 'discard', 'pop', 'clear', 'update'].includes(name)) throw new PyError('AttributeError', `'frozenset' object has no attribute '${name}'`);
       if (!SET_METHODS.includes(name)) throw fail();
       noKw(name, kw);
       const m = obj.v;
@@ -1941,6 +1983,7 @@ const Py = (() => {
       case 'list': argCount(name, args, 0, 1); if (args.length) noteOrder(args[0]); return V.list(args.length ? iterate(args[0]).slice() : []);
       case 'tuple': argCount(name, args, 0, 1); if (args.length) noteOrder(args[0]); return V.tuple(args.length ? iterate(args[0]).slice() : []);
       case 'set': argCount(name, args, 0, 1); return mkSet(args.length ? iterate(args[0]) : []);
+      case 'frozenset': { argCount(name, args, 0, 1); const r = mkSet(args.length ? iterate(args[0]) : []); r.frozen = true; return r; }
       case 'dict': {
         argCount(name, args, 0, 1);
         const d = dict();
@@ -2117,6 +2160,12 @@ const Py = (() => {
       case 'callable': argCount(name, args, 1); return V.bool(['builtin', 'native', 'function', 'boundmethod', 'class', 'type', 'exctype', 'method'].includes(args[0].t) || (args[0].t === 'instance' && !!classAttr(args[0].cls, '__call__')));
       case 'chr': argCount(name, args, 1); return V.str(String.fromCodePoint(needInt(args[0])));
       case 'ord': argCount(name, args, 1); if (args[0].t !== 'str' || [...args[0].v].length !== 1) throw new PyError('TypeError', `ord() expected a character, but string of length ${args[0].t === 'str' ? args[0].v.length : 0} found`); return V.int(args[0].v.codePointAt(0));
+      case 'format': argCount(name, args, 1, 2); if (args[1] && args[1].t !== 'str') throw new PyError('TypeError', 'format() argument 2 must be str'); return V.str(formatSpec(args[0], args[1] ? args[1].v : ''));
+      case 'bin': case 'hex': case 'oct': {
+        argCount(name, args, 1);
+        const n = needInt(args[0]), base = { bin: 2, hex: 16, oct: 8 }[name], pre = { bin: '0b', hex: '0x', oct: '0o' }[name];
+        return V.str((n < 0 ? '-' : '') + pre + Math.abs(n).toString(base));
+      }
       case 'divmod': argCount(name, args, 2); return V.tuple([binop('//', args[0], args[1]), binop('%', args[0], args[1])]);
       case 'pow': {
         argCount(name, args, 2, 3);
@@ -2393,7 +2442,10 @@ const Py = (() => {
     while (c.isClass || c.comp) c = c.parent;
     const qual = scope.isClass ? `${scope.clsName}.${name}` : c.fnObj ? `${c.fnObj.qualname || c.fnObj.name}.<locals>.${name}` : name;
     const ps = params.map(q => ({ name: q.name, kind: q.kind, hasDef: !!q.def, defVal: q.def ? evalE(q.def, scope, ctx) : null }));
-    return { t: 'function', name, qualname: qual, params: ps, body, closure: c, ...extra };
+    // a function made inside a comprehension keeps that comprehension's loop names (late binding, like Python)
+    let home = scope;
+    while (home.isClass) home = home.parent;
+    return { t: 'function', name, qualname: qual, params: ps, body, closure: home, ...extra };
   }
   // the loops of a comprehension, as a lazy stream of values
   function* compStream(e, scope, ctx, first) {
@@ -2513,7 +2565,7 @@ const Py = (() => {
         const v = evalE(e.e, scope, ctx);
         let s = scope;
         while (s.comp) s = s.parent;
-        if (BUILTINS.includes(e.name) || SPELLS.includes(e.name)) throw new PyError('SyntaxError', `"${e.name}" is a spell word in this game, pick another name`);
+        if (RESERVED.includes(e.name) || SPELLS.includes(e.name)) throw new PyError('SyntaxError', `"${e.name}" is a spell word in this game, pick another name`);
         s.vars[e.name] = v;
         return v;
       }
@@ -2587,7 +2639,7 @@ const Py = (() => {
   }
 
   // names that are spell words in this game: assigning to them is blocked
-  const RESERVED = ['print', 'str', 'int', 'float', 'bool', 'len', 'cast', 'range', 'sum', 'max', 'min', 'sorted', 'abs', 'round', 'list', 'type', 'enumerate', 'open'];
+  const RESERVED = ['print', 'cast'];
   // where an assignment to this name goes: the function, the whole spell (global), or an outer function (nonlocal)
   function homeOf(name, scope) {
     if (scope.globalNames && scope.globalNames.has(name)) return globalOf(scope);
@@ -2889,8 +2941,14 @@ const Py = (() => {
           throw cur;
         }
         const x = evalE(s.e, scope, ctx);
-        if (s.cause) evalE(s.cause, scope, ctx);
-        throw raiseValue(x);
+        const err = raiseValue(x);
+        if (s.cause) {
+          let c = evalE(s.cause, scope, ctx);
+          if (c.t === 'exctype') c = makeException(c.v, []);
+          if (c.t === 'class' && c.exc) c = makeInstance(c, [], {}, ctx);
+          if (err.obj) err.obj.cause = c;
+        }
+        throw err;
       }
       case 'assert': {
         const ok = truthy(evalE(s.cond, scope, ctx));
@@ -3522,7 +3580,30 @@ const Py = (() => {
     });
     return mkModule('argparse', { ArgumentParser: Parser });
   }
-  const MODULES = { argparse: makeArgparse, random: makeRandom, math: makeMath, statistics: makeStatistics, json: makeJson, csv: makeCsv, sys: makeSys, re: makeRe, pytest: makePytest, requests: makeRequests, string: STRING_MOD };
+  function makeCopy() {
+    const shallow = x => {
+      switch (x.t) {
+        case 'list': return V.list(x.v.slice());
+        case 'dict': { const d = dict(); for (const [k, e] of x.v) d.v.set(k, [e[0], e[1]]); return d; }
+        case 'set': { const r = mkSet([...x.v.values()]); r.frozen = x.frozen; return r; }
+        case 'instance': return { t: 'instance', cls: x.cls, attrs: new Map(x.attrs) };
+        default: return x;
+      }
+    };
+    const deep = (x, memo) => {
+      if (memo.has(x)) return memo.get(x);
+      switch (x.t) {
+        case 'list': { const r = V.list([]); memo.set(x, r); for (const v of x.v) r.v.push(deep(v, memo)); return r; }
+        case 'tuple': return V.tuple(x.v.map(v => deep(v, memo)));
+        case 'dict': { const d = dict(); memo.set(x, d); for (const [k, e] of x.v) d.v.set(k, [deep(e[0], memo), deep(e[1], memo)]); return d; }
+        case 'set': { const r = mkSet([...x.v.values()].map(v => deep(v, memo))); r.frozen = x.frozen; return r; }
+        case 'instance': { const o = { t: 'instance', cls: x.cls, attrs: new Map() }; memo.set(x, o); for (const [k, v] of x.attrs) o.attrs.set(k, deep(v, memo)); return o; }
+        default: return x;
+      }
+    };
+    return mkModule('copy', { copy: nat('copy', ([x]) => shallow(x)), deepcopy: nat('deepcopy', ([x]) => deep(x, new Map())) });
+  }
+  const MODULES = { copy: makeCopy, argparse: makeArgparse, random: makeRandom, math: makeMath, statistics: makeStatistics, json: makeJson, csv: makeCsv, sys: makeSys, re: makeRe, pytest: makePytest, requests: makeRequests, string: STRING_MOD };
   function loadModule(name, ctx) {
     if (ctx.modules[name]) return ctx.modules[name];
     if (ctx.userModules && ctx.userModules[name]) return (ctx.modules[name] = runUserModule(name, ctx));

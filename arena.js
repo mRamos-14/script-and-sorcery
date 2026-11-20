@@ -619,5 +619,6 @@ const Arena = (() => {
   for (const k in ALIAS) GEN[k] = GEN[ALIAS[k]];
   // seeded randomness for review bosses and the checker
   const useRandom = fn => { rand = fn || Math.random; };
-  return { GEN, useRandom };
+  // world files add their own question pools with these helpers
+  return { GEN, useRandom, makeQ, pick, rnd, shuffle, WORDS, NAMES };
 })();

@@ -7,6 +7,8 @@
    require(input, vars) returns a message when an answer skips the lesson.
    tags feed the Training Grounds question pools. */
 
+// newer world files add their own mentors and monsters here (see game.js)
+var EXTRA = { npcs: {}, foes: {} };
 const typed = lines => lines.join('\n');
 const has = (lines, re) => re.test(typed(lines));
 
