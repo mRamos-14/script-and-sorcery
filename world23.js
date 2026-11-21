@@ -294,7 +294,7 @@ const WORLD23 = {
       id: '23-R', title: 'The Grand Automaton', bg: 'automaton', foe: { kind: 'automaton', hp: 200 }, mentor: 'narrator', boss: true, review: true, tags: [],
       steps: [
         { type: 'talk', who: 'automaton', text: 'I AM THE GRAND AUTOMATON. I WAS BUILT FROM EVERY LESSON OF THE FORGE, THE KEEP AND THE CITADEL. PROVE YOU UNDERSTAND MY PARTS.' },
-        { type: 'talk', who: 'narrator', text: 'Review boss! Worlds 10 to 12, plus a few old favorites. Every right answer strikes it. 200 HP.' },
+        { type: 'talk', who: 'narrator', text: 'Review boss! Worlds 21 to 23 (classes, inheritance and properties), plus a few old favorites. Every right answer strikes it. 200 HP.' },
         { type: 'review', tags: ['class', 'init', 'method'], reward: { spell: 'spark', power: 20 }, text: 'The Forge. What will the spellbook say?' },
         { type: 'review', tags: ['state', 'strdunder', 'objlist'], reward: { spell: 'fireball', power: 20 }, text: 'Golems at work. What will it say?' },
         { type: 'review', tags: ['inherit', 'override', 'superc'], reward: { spell: 'icebolt', power: 20 }, text: 'The Keep. What will it say?' },
@@ -320,7 +320,7 @@ const WORLD23 = {
         },
         { type: 'talk', who: 'automaton', text: 'SYSTEMS... RESPECT... MAKER. OBJECTS ARE YOURS TO COMMAND.' },
       ],
-      learn: [{ title: 'Object-oriented Python', code: 'class  __init__  self  methods\ninheritance  super()  @property', text: 'CS50P week 8, practised and tested. Next: libraries, regex and tests.' }],
+      learn: [{ title: 'Object-oriented Python', code: 'class  __init__  self  methods\ninheritance  super()  @property', text: 'CS50P week 8, practised and tested. Next: the data structures of the Builder\'s Yard and the Rootwood.' }],
     },
   ],
 };

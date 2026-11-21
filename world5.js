@@ -62,7 +62,7 @@ const WORLD5 = {
       id: '5-2', title: 'The gatekeeper', bg: 'crossroads', npc: 'ranger', mentor: 'ranger', tags: ['ifs'],
       steps: [
         { type: 'talk', who: 'ranger', text: 'The north gate opens only for the right password. An if statement runs code only when its question is True.' },
-        { type: 'talk', who: 'ranger', text: 'Write if, a question, then a colon. The lines underneath are indented by 4 spaces. That indented block is what the if controls. Watch the True and False tags appear.' },
+        { type: 'talk', who: 'ranger', text: 'Write if, a question, then a colon. The lines underneath are indented (4 spaces is the standard). That indented block is what the if controls. Watch the True and False tags appear.' },
         { type: 'demo', text: 'Run it.', code: ['password = "oak"', 'if password == "oak":', '    print("The gate opens!")', 'print("The ranger nods.")'] },
         {
           type: 'predict', vars: R => ({ p: R.pick(['pine', 'oak', 'elm', 'Oak']) }), text: 'What will it say?', code: ['password = "$p"', 'if password == "oak":', '    print("The gate opens!")', 'print("The ranger nods.")'],
@@ -83,7 +83,7 @@ const WORLD5 = {
           text: 'This spell crashes before it even starts. Run it, then tap the broken line.',
           code: ['$t = True', 'if $t:', 'print("$m")'], bad: 2,
           options: ['    print("$m")', 'print("$m"):', 'if print("$m")'], answer: 0,
-          explain: 'The line under an if must be indented. Four spaces tell Python it belongs to the if.',
+          explain: 'The line under an if must be indented. The indent tells Python it belongs to the if.',
         },
         { type: 'talk', who: 'ranger', text: 'Now type one yourself. After the colon, the return key indents the next line for you. ⇥ adds 4 spaces and ⇤ removes them.' },
         {
@@ -97,7 +97,7 @@ const WORLD5 = {
       ],
       learn: [
         { title: 'if', code: 'if gold > 10:\n    print("Rich!")', text: 'Runs the indented block only when the question is True.' },
-        { title: 'Indentation', code: '4 spaces', text: 'Lines pushed right by 4 spaces belong to the if above them. Lines back at the left edge always run.' },
+        { title: 'Indentation', code: '4 spaces', text: 'Lines pushed right (by the same amount, 4 spaces as standard) belong to the if above them. Lines back at the left edge always run.' },
       ],
     },
     {
@@ -375,7 +375,7 @@ const WORLD5 = {
           code: ['roots = $r', 'if roots > 2:', '    print("Burn the roots!")', '  cast(fireball, 15)'], bad: 3,
           options: ['    cast(fireball, 15)', 'cast(fireball 15)', '        cast(fireball, 15)'], answer: 0,
           goal: { output: 'auto' },
-          explain: 'Every line in a block needs the same indentation: exactly 4 spaces.',
+          explain: 'Every line in a block needs the same indentation. Python only demands that it matches; 4 spaces is the standard everyone uses.',
         },
         { type: 'talk', who: 'treant', text: 'GRRAAH! Then answer my riddle, little mage!' },
         {
@@ -402,7 +402,7 @@ const WORLD5 = {
       id: '5-R', title: 'The Examiner', bg: 'trials', foe: { kind: 'sphinx', hp: 160 }, mentor: 'narrator', boss: true, review: true, tags: [],
       steps: [
         { type: 'talk', who: 'sphinx', text: 'Halt, traveller. Before the caves below, you must prove what you have learned. Every answer is drawn fresh. Memory will not save you. Understanding will.' },
-        { type: 'talk', who: 'narrator', text: 'Review battle! Worlds 1 to 3, all mixed together. Each correct answer strikes the Examiner. It has 160 HP.' },
+        { type: 'talk', who: 'narrator', text: 'Review battle! Values, strings and decisions from your first worlds, all mixed together. Each correct answer strikes the Examiner. It has 160 HP.' },
         { type: 'review', tags: ['print', 'math', 'vars', 'update'], reward: { spell: 'spark', power: 20 }, text: 'Village knowledge. What will the spellbook say?' },
         { type: 'review', tags: ['concat', 'repeat', 'types'], reward: { spell: 'fireball', power: 20 }, text: 'More village knowledge. What will it say?' },
         { type: 'review', tags: ['len', 'case', 'index', 'slice'], reward: { spell: 'icebolt', power: 20 }, text: 'Library knowledge. What will it say?' },
@@ -429,7 +429,7 @@ const WORLD5 = {
         },
         { type: 'talk', who: 'sphinx', text: 'You have understood, not memorized. The way to the Echo Caves is open.' },
       ],
-      learn: [{ title: 'Review: Worlds 1 to 3', code: 'print  vars  strings  if/elif/else', text: 'Values, jars, strings and decisions. Everything after this builds on these.' }],
+      learn: [{ title: 'Review: first steps', code: 'print  vars  strings  if/elif/else', text: 'Values, jars, strings and decisions. Everything after this builds on these.' }],
     },
   ],
 };

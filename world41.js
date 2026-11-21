@@ -299,7 +299,7 @@ const WORLD41 = {
       id: '41-R', title: 'The Last Gate', bg: 'lastgate', foe: { kind: 'gatekeeper', hp: 300 }, mentor: 'narrator', boss: true, review: true, tags: [],
       steps: [
         { type: 'talk', who: 'gatekeeper', text: 'Forty-one worlds behind you, {NAME}. Beyond this gate the oldest magic waits. Show me everything.' },
-        { type: 'talk', who: 'narrator', text: 'The final review! Every world, mixed together. 300 HP. Each right answer strikes.' },
+        { type: 'talk', who: 'narrator', text: 'The great review! Lessons from every act so far, mixed together. 300 HP. Each right answer strikes.' },
         { type: 'review', tags: ['print', 'vars', 'fstr', 'methods', 'ifelse', 'logic'], reward: { spell: 'spark', power: 20 }, text: 'Where it began. What will it say?' },
         { type: 'review', tags: ['forloop', 'while', 'lists', 'comp', 'dicts', 'dictloop'], reward: { spell: 'fireball', power: 20 }, text: 'Loops and collections. What will it say?' },
         { type: 'review', tags: ['func', 'return', 'recursion', 'tryexcept', 'files', 'parse'], reward: { spell: 'icebolt', power: 20 }, text: 'Functions, errors, files. What will it say?' },

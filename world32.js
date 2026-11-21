@@ -18,7 +18,7 @@ const WORLD32 = {
           explain: 'Both asserts are true, so both prints run. A negative squared is positive.',
         },
         {
-          type: 'predict', measure: 'errtype', vars: R => ({ n: R.int(2, 9) }), text: 'A wrong expectation. Which error will this cause?',
+          type: 'predict', measure: 'errtype', vars: R => ({ n: R.int(3, 9) }), text: 'A wrong expectation. Which error will this cause?',
           code: [...SQ, 'assert square($n) == $(n * 2)'],
           explain: 'square($n) is $(n * n), not $(n * 2), so the assert fails: AssertionError.',
         },
@@ -270,7 +270,7 @@ const WORLD32 = {
       id: '32-R', title: 'The Tribunal', bg: 'court', foe: { kind: 'tribunal', hp: 200 }, mentor: 'narrator', boss: true, review: true, tags: [],
       steps: [
         { type: 'talk', who: 'tribunal', text: 'WE ARE THE TRIBUNAL. LIBRARIES. PATTERNS. PROOF. ANSWER FOR ALL THREE.' },
-        { type: 'talk', who: 'narrator', text: 'Review boss! Worlds 13 to 15, plus older lessons. 200 HP. Each right answer strikes.' },
+        { type: 'talk', who: 'narrator', text: 'Review boss! Libraries, patterns and testing (worlds 26, 29 and 32), plus older lessons. 200 HP. Each right answer strikes.' },
         { type: 'review', tags: ['modules', 'stats', 'jsonq'], reward: { spell: 'spark', power: 20 }, text: 'The Bazaar. What will the spellbook say?' },
         { type: 'review', tags: ['randomq', 'argv', 'mymodule'], reward: { spell: 'fireball', power: 20 }, text: 'Libraries at work. What will it say?' },
         { type: 'review', tags: ['research', 'rewild', 'reclass'], reward: { spell: 'icebolt', power: 20 }, text: 'The Marsh. What will it say?' },
@@ -294,9 +294,9 @@ const WORLD32 = {
           hints: ['def strike(n): / cast(fireball, n)', 'def test_strike(): / assert $h > 0 / strike($h)'],
           solution: ['def strike(n):', '    cast(fireball, n)', 'def test_strike():', '    assert $h > 0', '    strike($h)'],
         },
-        { type: 'talk', who: 'tribunal', text: 'THE VERDICT IS IN. YOU HAVE COMPLETED EVERY WEEK OF CS50P. GO ON, AND LEARN THE REST.' },
+        { type: 'talk', who: 'tribunal', text: 'THE VERDICT IS IN. NEARLY ALL OF CS50P IS PROVEN. ITS LAST WEEK OF EXTRAS AWAITS YOU IN ACT VIII. GO ON.' },
       ],
-      learn: [{ title: 'CS50P, complete', code: 'functions  conditionals  loops  exceptions\nlibraries  tests  files  regex  classes', text: 'Every week of CS50P, practised and tested. Next: the deeper toolkit of Python.' }],
+      learn: [{ title: 'CS50P, nearly complete', code: 'functions  conditionals  loops  exceptions\nlibraries  tests  files  regex  classes', text: 'CS50P weeks 0 to 8, practised and tested (week 9 extras like type hints, *args and generators come in Act VIII). Next: data and the web.' }],
     },
   ],
 };

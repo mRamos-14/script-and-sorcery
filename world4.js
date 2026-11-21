@@ -86,7 +86,7 @@ const WORLD4 = {
           type: 'predict', vars: R => ({ w: R.pick(SCRIBE_WORDS.filter(x => x.length >= 5)) }),
           text: 'Indexes past the end crash. Do slices? What will it say?', code: ['print("$w"[2:100])'],
           wrong: ['Error', '$(w.slice(2, -1))', ''],
-          explain: 'Slices never crash: past the end they simply stop at the end.',
+          explain: 'Slices never crash on positions past the end: they simply stop at the end.',
         },
         {
           type: 'fill', vars: R => ({ w: R.pick(['quill', 'candle', 'margin', 'letter', 'chapter']) }),
@@ -111,7 +111,7 @@ const WORLD4 = {
         },
       ],
       learn: [
-        { title: 'Slices with steps', code: 'w[start:stop:step]\nw[::2]   every 2nd\nw[::-1]  reversed', text: 'Start is included, stop is not, step is the jump. Slices never crash.' },
+        { title: 'Slices with steps', code: 'w[start:stop:step]\nw[::2]   every 2nd\nw[::-1]  reversed', text: 'Start is included, stop is not, step is the jump. Slices past the end never crash.' },
       ],
     },
     {

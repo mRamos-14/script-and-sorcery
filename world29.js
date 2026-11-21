@@ -82,7 +82,7 @@ const WORLD29 = {
     {
       id: '29-3', title: 'Kinds of tracks', bg: 'marsh', npc: 'hermit', mentor: 'hermit', tags: ['reclass'],
       steps: [
-        { type: 'talk', who: 'hermit', text: 'Square brackets mean "one of these": [aeiou] is any vowel, [0-9] any digit. Shortcuts: \\d a digit, \\w a letter, digit or _, \\s a space. re.findall gives every match as a list.' },
+        { type: 'talk', who: 'hermit', text: 'Square brackets mean "one of these": [aeiou] is any vowel, [0-9] any digit. Shortcuts: \\d a digit, \\w a letter, digit or _, \\s any whitespace (a space, a tab or a line break). re.findall gives every match as a list.' },
         { type: 'demo', vars: R => ({ c: R.pick(CREATURES) }), text: 'Run it.', code: ['import re', 'print(re.findall(r"[aeiou]", "$c"))', 'print(re.findall(r"\\d+", "3 frogs and 12 newts"))'] },
         {
           type: 'predict', vars: R => ({ c: R.pick(['marshland', 'heronry', 'dragonfly', 'lilypad', 'mudskipper']) }), text: 'Counting vowels. What will it say?',

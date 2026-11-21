@@ -113,7 +113,7 @@ const WORLD2 = {
       id: '2-3', title: 'Powers and order', bg: 'study', npc: 'minter', mentor: 'minter', tags: ['precedence'],
       steps: [
         { type: 'talk', who: 'minter', text: "I'm Minter Hob. I stamp coins, and I stamp them in the right ORDER. ** means power: 2 ** 3 is 2 × 2 × 2 = 8." },
-        { type: 'talk', who: 'minter', text: 'Python follows the order from maths class: brackets first, then **, then * / // %, then + and -. Same level? Left to right.' },
+        { type: 'talk', who: 'minter', text: 'Python follows the order from maths class: brackets first, then **, then * / // %, then + and -. Same level? Left to right, except ** which goes right to left: 2 ** 3 ** 2 is 2 ** 9.' },
         { type: 'demo', text: 'Run it and compare the last two lines.', code: ['print(2 ** 5)', 'print(2 + 3 * 4)', 'print((2 + 3) * 4)'] },
         {
           type: 'predict', vars: R => ({ a: R.int(2, 9), b: R.int(2, 6), c: R.int(2, 5) }),

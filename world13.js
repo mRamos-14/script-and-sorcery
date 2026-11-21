@@ -86,7 +86,7 @@ const WORLD13 = {
         },
         {
           type: 'predict', vars: R => ({ i: R.int(3, 8) }), text: 'Catching everything. What will it say?', code: ['try:', '    print([1, 2][$i])', 'except Exception as e:', '    print("Oops:", e)'],
-          explain: 'Exception catches any error, and as e lets you print its message.',
+          explain: 'Exception catches almost every error (all the ordinary ones), and as e lets you print its message.',
         },
         {
           type: 'fix', vars: R => ({ w: R.word() }),
@@ -104,7 +104,7 @@ const WORLD13 = {
           solution: ['try:', '    print(stock[key])', 'except KeyError:', '    print("Sold out")'],
         },
       ],
-      learn: [{ title: 'Choosing what to catch', code: 'except KeyError:\nexcept Exception as e:', text: 'Catch the specific error you expect. Exception catches everything, and as e gives you the message.' }],
+      learn: [{ title: 'Choosing what to catch', code: 'except KeyError:\nexcept Exception as e:', text: 'Catch the specific error you expect. Exception catches almost every error, and as e gives you the message.' }],
     },
     {
       id: '13-4', title: 'Rattling skeletons', bg: 'traps', mentor: 'narrator', tags: [],
@@ -232,7 +232,7 @@ const WORLD13 = {
           hints: ['Guard the risky line with try.', 'int("oops") raises ValueError.'],
         },
       ],
-      learn: [{ title: 'Validating data', code: 'for x in data:\n    try: ...\n    except: pass', text: 'Real data is messy. Try each item and handle the bad ones.' }],
+      learn: [{ title: 'Validating data', code: 'for x in data:\n    try: ...\n    except ValueError: pass', text: 'Real data is messy. Try each item and handle the bad ones.' }],
     },
     {
       id: '13-8', title: 'Dungeon ghosts', bg: 'traps', mentor: 'narrator', tags: [],

@@ -292,7 +292,7 @@ const WORLD9 = {
       id: '9-R', title: 'The Elder Dragon', bg: 'skytemple', foe: { kind: 'dragon', hp: 200 }, mentor: 'narrator', boss: true, review: true, tags: [],
       steps: [
         { type: 'talk', who: 'dragon', text: 'Little mage. Nine worlds you have crossed. Show me that you truly understand them, and the Prism Gardens will open. Every question I ask is new.' },
-        { type: 'talk', who: 'narrator', text: 'Review battle! Worlds 1 to 6, all mixed. The Elder Dragon has 200 HP. Each right answer strikes it.' },
+        { type: 'talk', who: 'narrator', text: 'Review battle! Values, choices, loops, lists and dictionaries from every world so far, all mixed. The Elder Dragon has 200 HP. Each right answer strikes it.' },
         { type: 'review', tags: ['math', 'update', 'types', 'fstr', 'slice'], reward: { spell: 'fireball', power: 20 }, text: 'Old magic. What will the spellbook say?' },
         { type: 'review', tags: ['compare', 'ifelse', 'elif', 'logic', 'mod'], reward: { spell: 'icebolt', power: 20 }, text: 'Forest magic. What will it say?' },
         { type: 'review', tags: ['forloop', 'range', 'while', 'break'], reward: { spell: 'spark', power: 20 }, text: 'Cave magic. What will it say?' },
@@ -320,7 +320,7 @@ const WORLD9 = {
         },
         { type: 'talk', who: 'dragon', text: 'You think in Python now. Go. The Prism Gardens await.' },
       ],
-      learn: [{ title: 'Review: Worlds 1 to 6', code: 'values  if  loops  lists  dicts', text: 'With these five, you can already write real programs.' }],
+      learn: [{ title: 'Review: Acts I and II', code: 'values  if  loops  lists  dicts', text: 'With these five, you can already write real programs.' }],
     },
   ],
 };

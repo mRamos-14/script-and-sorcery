@@ -31,7 +31,7 @@ const WORLD28 = {
         {
           type: 'predict', vars: R => ({ a: R.pick(['home', 'quests', 'castle']), b: R.pick(['north', 'east', 'cellar']) }),
           text: 'Deeper paths. What will it say?', code: ['from pathlib import Path', 'p = Path("$a", "$b", "plan.txt")', 'print(p)', 'print(p.parent.name)'],
-          explain: 'Path("a", "b", "c") joins the parts with "/". The parent of the file is the $b folder.',
+          explain: 'Path("a", "b", "c") joins the parts with the system\'s separator: "/" here and on Mac and Linux (Windows shows a backslash). The parent of the file is the $b folder.',
         },
         {
           type: 'predict', text: 'Changing the ending. What will it say?', code: ['from pathlib import Path', 'p = Path("notes") / "day1.txt"', 'print(p.with_suffix(".md"))'],

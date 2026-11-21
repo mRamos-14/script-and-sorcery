@@ -718,7 +718,7 @@ const WORLD3 = {
         },
       ],
       learn: [
-        { title: 'replace, count, strip', code: 's.replace("a", "b")   s.count("a")   s.strip()', text: 'More string tools. Like all string methods, they return a new string or number.' },
+        { title: 'replace, count, strip', code: 's.replace("a", "b")   s.count("a")   s.strip()', text: 'More string tools. Like all string methods, they never change the string itself: they return a new value.' },
         { title: 'Chaining', code: 's.strip().title()', text: 'Each method returns a value, so you can call the next method on it.' },
       ],
     },

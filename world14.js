@@ -97,7 +97,7 @@ const WORLD14 = {
           text: 'This will not even start. Run it, then tap the broken line.',
           code: ['with open("$f.txt") as f', '    print(f.read().strip())'], bad: 0,
           options: ['with open("$f.txt") as f:', 'with open("$f.txt"):', 'with f = open("$f.txt"):'], answer: 0,
-          explain: 'A with line needs as f to name the file, and a colon at the end.',
+          explain: 'A with line ends with a colon, just like if and for. (as f names the file so the block can use it.)',
         },
         {
           type: 'write', vars: R => ({ f: R.pick(SCROLLS), n: R.int(2, 5) }), files: { '$f.txt': '$(Array.from({ length: n }, (_, i) => "entry " + (i + 1)).join("\\n"))\n' },
@@ -327,7 +327,7 @@ const WORLD14 = {
       id: '14-R', title: 'The Source', bg: 'source', foe: { kind: 'source', hp: 260 }, mentor: 'narrator', boss: true, review: true, tags: [],
       steps: [
         { type: 'talk', who: 'source', text: 'I am the Source, where every spell begins. Fourteen worlds you have walked. Now answer everything at once, {NAME}. No question I ask has ever been asked before.' },
-        { type: 'talk', who: 'narrator', text: 'Final review! Every world, all mixed. The Source has 260 HP. Each right answer strikes it.' },
+        { type: 'talk', who: 'narrator', text: 'Act III review! Every world so far, all mixed. The Source has 260 HP. Each right answer strikes it.' },
         { type: 'review', tags: ['print', 'math', 'vars', 'update', 'types'], reward: { spell: 'spark', power: 20 }, text: 'Village. What will the spellbook say?' },
         { type: 'review', tags: ['len', 'case', 'index', 'slice', 'fstr', 'methods'], reward: { spell: 'fireball', power: 20 }, text: 'Library. What will it say?' },
         { type: 'review', tags: ['compare', 'ifelse', 'elif', 'logic', 'mod', 'in'], reward: { spell: 'icebolt', power: 20 }, text: 'Forest. What will it say?' },
@@ -356,9 +356,9 @@ const WORLD14 = {
           hints: ['def strike(): / with open("final.txt") as f: / return int(f.read())', 'cast(fireball, strike()) at the left edge.'],
           solution: ['def strike():', '    with open("final.txt") as f:', '        return int(f.read())', 'cast(fireball, strike())'],
         },
-        { type: 'talk', who: 'source', text: 'It is done. You are no longer an apprentice, {NAME}. You are a programmer. Go and build something of your own.' },
+        { type: 'talk', who: 'source', text: 'It is done. You are no longer an apprentice, {NAME}. You can write real programs now. The Hall of Mirrors awaits, and beyond it, the art of algorithms.' },
       ],
-      learn: [{ title: 'The whole journey', code: 'values  if  loops  lists  dicts\nfunctions  errors  files', text: 'Everything in CS50P weeks 0 to 3 and 6, practised and tested. Next: classes, libraries, regex and tests.' }],
+      learn: [{ title: 'The whole journey', code: 'values  if  loops  lists  dicts\nfunctions  errors  files', text: 'Everything in CS50P weeks 0 to 3 and 6, practised and tested. Next: the Hall of Mirrors (classic Python traps), then algorithms, classes, libraries, regex and tests.' }],
     },
   ],
 };

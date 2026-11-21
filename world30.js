@@ -164,7 +164,7 @@ const WORLD30 = {
     {
       id: '30-5', title: 'The guild mailbox', bg: 'archive', npc: 'scrivo', mentor: 'scrivo', tags: ['mbox'],
       steps: [
-        { type: 'talk', who: 'scrivo', text: 'The guild keeps every letter in one big file, mbox.txt. Each letter starts with a line "From address date" and has header lines like "X-DSPAM-Confidence: 0.8475". Python for Everybody spends a whole course on files like this.' },
+        { type: 'talk', who: 'scrivo', text: 'The guild keeps every letter in one big file, mbox.txt. Each letter starts with a line "From address date" and has header lines like "X-DSPAM-Confidence: 0.8475". Python for Everybody uses files like this in many of its exercises.' },
         { type: 'demo', files: { 'mbox.txt': MBOX }, text: 'Find every sender. Run it.', code: ['with open("mbox.txt") as f:', '    for line in f:', '        if line.startswith("From "):', '            print(line.split()[1])'] },
         {
           type: 'predict', files: { 'mbox.txt': MBOX }, text: 'Average the confidence. What will it say?', code: ['total, count = 0.0, 0', 'with open("mbox.txt") as f:', '    for line in f:', '        if line.startswith("X-DSPAM-Confidence:"):', '            total += float(line[line.find(":") + 1:])', '            count += 1', 'print(count, round(total / count, 4))'],
@@ -294,7 +294,7 @@ const WORLD30 = {
           type: 'fix', text: 'This should print the balance with exactly 2 decimals. Run it, then tap the broken line.',
           code: ['balance = 12.5', 'print(f"Balance: {balance:2f}")', 'cast(icebolt, 6)'], bad: 1,
           options: ['print(f"Balance: {balance:.2f}")', 'print(f"Balance: {balance:2}")', 'print(f"Balance: {balance}.2f")'], answer: 0,
-          explain: 'The dot matters: .2f means 2 decimals, 2f means "at least 2 wide".',
+          explain: 'The dot matters: .2f means 2 decimals. Without it, 2f means "at least 2 characters wide" with the default 6 decimals: 12.500000.',
         },
         { type: 'talk', who: 'livingledger', text: 'READ... MY... MAIL...' },
         {
