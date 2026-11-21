@@ -2221,6 +2221,24 @@
         else say('In Chrome: tap ⋮ at the top right, then "Add to Home screen" and choose Install. Already installed? Open Script & Sorcery from your home screen. If you only see "Create shortcut", wait a few seconds for the page to load and try again.');
       };
     }
+    // On Android only Chrome turns the install into a real app (a WebAPK). Other browsers and
+    // in-app browsers can only add a shortcut, which shows their logo on the icon, so steer to Chrome.
+    const otherBrowser = () => (navigator.brave ? 'Brave' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /EdgA\//.test(ua) ? 'Edge' : /OPR\/|OPT\//.test(ua) ? 'Opera' : /Firefox\//.test(ua) ? 'Firefox' : /DuckDuckGo/.test(ua) ? 'DuckDuckGo' : null);
+    const renderDownload = () => {
+      const where = inApp ? 'another app\'s browser' : otherBrowser();
+      const steer = /Android/.test(navigator.userAgent) && !!where;
+      $('#dl-chrome').hidden = !steer;
+      $('#dl-note').hidden = !steer;
+      if (steer) $('#dl-note').textContent = `You opened this in ${where}. Only Chrome installs it as a real app, without a browser logo on the icon.`;
+      $('#dl-install').classList.toggle('ghost', steer);
+      $('#dl-install').textContent = steer ? 'Install here anyway (shortcut)' : 'Download the app';
+    };
+    $('#dl-chrome').onclick = () => {
+      sfx('tap');
+      location.href = `intent://${location.host}${location.pathname}#Intent;scheme=https;package=com.android.chrome;end`;
+    };
+    renderDownload();
+    if (/[?&]debug/.test(location.search)) window.__renderDownload = renderDownload;
     $('#dl-play').onclick = () => {
       sfx('tap');
       try { sessionStorage.setItem('sorcery-play', '1'); } catch (e) { /* fine */ }
