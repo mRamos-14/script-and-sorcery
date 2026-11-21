@@ -303,7 +303,7 @@
   function bgImage(k) { if (!IMG[k]) { IMG[k] = new Image(); IMG[k].src = `assets/bg-${k}.jpg`; } return IMG[k]; }
 
   /* ---------------- screens ---------------- */
-  const screens = ['title', 'creator', 'map', 'level', 'book', 'shop', 'settings'];
+  const screens = ['download', 'title', 'creator', 'map', 'level', 'book', 'shop', 'settings'];
   let currentScreen = 'title', settingsReturn = 'title', shopReturn = 'map';
   // the music follows where you are: menu, world map, lesson, battle, boss, Tower, Training
   function updateMusic() {
@@ -337,7 +337,7 @@
   });
   function show(name) {
     currentScreen = name;
-    if (name !== 'title') armBack();
+    if (name !== 'title' && name !== 'download') armBack();
     for (const s of screens) $('#scr-' + s).hidden = s !== name;
     scene.active = name === 'level';
     if (name === 'map') renderMap();
@@ -2183,32 +2183,49 @@
   }
   // Install button: uses Chrome's own install box when it is offered, and explains
   // what to do when it is not (inside another app's browser, iPhone, already installed).
+  // The shared link opens a download page; the game itself starts straight away only inside
+  // the installed app, or after "Play in the browser instead" (remembered for this tab).
+  const installedApp = window.matchMedia('(display-mode: standalone)').matches || !!navigator.standalone;
+  let playInBrowser = /[?&]play\b/.test(location.search);
+  try { playInBrowser = playInBrowser || sessionStorage.getItem('sorcery-play') === '1'; } catch (e) { /* private mode */ }
+  const startScreen = () => (hosted && !installedApp && !playInBrowser ? 'download' : 'title');
   if (hosted) {
-    const ib = $('#btn-install'), hint = $('#install-hint');
     const ua = navigator.userAgent;
-    const installed = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
     const inApp = /; wv\)|FBAN|FBAV|Instagram|Line\/|GSA\//.test(ua);
     const ios = /iPhone|iPad|iPod/.test(ua);
     let promptEvent = null;
-    const say = text => { hint.textContent = text; hint.hidden = false; };
-    if (!installed) {
-      ib.hidden = false;
-      window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); promptEvent = e; hint.hidden = true; });
-      window.addEventListener('appinstalled', () => { ib.hidden = true; say('Installed! Open Script & Sorcery from your home screen.'); });
-      ib.onclick = async () => {
+    // two install buttons, one on the download page and one on the title screen
+    const spots = [[$('#dl-install'), $('#dl-hint')], [$('#btn-install'), $('#install-hint')]];
+    const sayAll = text => spots.forEach(([, h]) => { h.textContent = text; h.hidden = !text; });
+    window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); promptEvent = e; sayAll(''); });
+    window.addEventListener('appinstalled', () => {
+      $('#btn-install').hidden = true;
+      $('#dl-install').textContent = 'Installed';
+      $('#dl-install').disabled = true;
+      sayAll('Installed! Open Script & Sorcery from your home screen.');
+    });
+    for (const [btn, hint] of spots) {
+      const say = text => { hint.textContent = text; hint.hidden = false; };
+      if (btn.id === 'btn-install') btn.hidden = installedApp;
+      btn.onclick = async () => {
         sfx('tap');
         if (promptEvent) {
           promptEvent.prompt();
           const r = await promptEvent.userChoice.catch(() => null);
-          if (r && r.outcome === 'accepted') ib.hidden = true;
+          if (r && r.outcome === 'accepted') { say('Installing... it will appear on your home screen.'); $('#btn-install').hidden = true; }
           promptEvent = null;
           return;
         }
-        if (inApp) say('You are inside another app\'s browser, which cannot install apps. Tap its ⋮ or share menu and choose "Open in Chrome", then tap Install app again.');
+        if (inApp) say('You are inside another app\'s browser, which cannot install apps. Tap its ⋮ or share menu and choose "Open in Chrome", then tap Download again.');
         else if (ios) say('On iPhone: tap the Share button in Safari, then "Add to Home Screen".');
-        else say('In Chrome: tap ⋮ at the top right, then "Add to Home screen" and choose Install. If you only see "Create shortcut", wait a few seconds for the page to finish loading and try again.');
+        else say('In Chrome: tap ⋮ at the top right, then "Add to Home screen" and choose Install. Already installed? Open Script & Sorcery from your home screen. If you only see "Create shortcut", wait a few seconds for the page to load and try again.');
       };
     }
+    $('#dl-play').onclick = () => {
+      sfx('tap');
+      try { sessionStorage.setItem('sorcery-play', '1'); } catch (e) { /* fine */ }
+      show('title');
+    };
   }
 
   /* ---------------- Update button (only on the hosted build) ----------------
@@ -2282,5 +2299,5 @@
   $('#talk').onclick = () => { if (L && !L.arena && L.st && L.st.type === 'talk' && !L.busy) { sfx('tap'); next(); } };
   // test hook for the local auto-player: http://localhost:5252/?debug
   if (/[?&]debug/.test(location.search)) window.__game = { L: () => L, startLevel, startTower, beginClimb, towerPool, dailyPlan, tierOf, save: () => save, persist };
-  show('title');
+  show(startScreen());
 })();

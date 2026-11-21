@@ -45,7 +45,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--gold); outl
 .t-kw { color: var(--t-kw); font-weight: 600; } .t-str { color: var(--t-str); } .t-num { color: var(--t-num); } .t-fn { color: var(--t-fn); } .t-spell { color: var(--t-spell); } .t-op { color: var(--t-op); }
 
 /* title */
-#scr-title { position: relative; justify-content: flex-end; min-height: calc(100dvh - 24px); border-radius: 6px; overflow: hidden; background: #2a1c4a url(assets/bg-title.jpg) center/cover no-repeat; box-shadow: 0 0 0 3px var(--edge-dark); padding: 20px 16px; box-sizing: border-box; }
+#scr-title, #scr-download { position: relative; justify-content: flex-end; min-height: calc(100dvh - 24px); border-radius: 6px; overflow: hidden; background: #2a1c4a url(assets/bg-title.jpg) center/cover no-repeat; box-shadow: 0 0 0 3px var(--edge-dark); padding: 20px 16px; box-sizing: border-box; }
 .logo { position: absolute; top: 9%; left: 0; right: 0; text-align: center; padding: 0 12px; }
 .logo h1 { font-family: var(--font-display); font-weight: 400; font-size: clamp(22px, 7vw, 30px); line-height: 1.45; margin: 0; color: var(--gold); text-shadow: 3px 3px 0 var(--edge-dark), -2px -2px 0 var(--edge-dark), 2px -2px 0 var(--edge-dark), -2px 2px 0 var(--edge-dark); text-wrap: balance; }
 .logo p { margin: 14px 0 0; font-size: 18px; color: var(--text); text-shadow: 2px 2px 0 var(--edge-dark); }
@@ -55,6 +55,10 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--gold); outl
 .confirm { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 15px; justify-content: center; }
 .confirm .btn { font-size: 15px; padding: 8px 12px 10px; }
 .install-hint { color: var(--text); text-align: center; }
+.dl-card { align-items: center; text-align: center; }
+.dl-icon { width: 96px; height: 96px; border-radius: 20px; image-rendering: pixelated; box-shadow: 0 0 0 2px var(--edge-dark); }
+.dl-lead { margin: 0; font-size: 17px; color: var(--text); }
+.dl-card .btn { align-self: stretch; }
 .menu-hero { display: flex; gap: 12px; align-items: center; }
 #menu-portrait { width: 56px; height: 56px; image-rendering: pixelated; background: #1b1530; border-radius: 4px; box-shadow: 0 0 0 2px var(--edge-dark); flex: none; }
 .menu-hero-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -354,6 +358,20 @@ button, .nav, .wpick, .node { -webkit-user-select: none; user-select: none; -web
 </style>
 
 <div id="app">
+
+  <section id="scr-download" class="screen" hidden>
+    <div class="logo">
+      <h1>Script &amp; Sorcery</h1>
+      <p>Learn Python by casting spells</p>
+    </div>
+    <div class="title-card px dl-card">
+      <img src="icons/icon-192.png" alt="" class="dl-icon" width="96" height="96">
+      <p class="dl-lead">Get the app. It lives on your home screen, plays offline and updates itself with one tap.</p>
+      <button id="dl-install" class="btn">Download the app</button>
+      <p id="dl-hint" class="small install-hint" hidden></p>
+      <button id="dl-play" class="linkish">Play in the browser instead</button>
+    </div>
+  </section>
 
   <section id="scr-title" class="screen">
     <div class="logo">
