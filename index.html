@@ -59,6 +59,8 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--gold); outl
 .dl-icon { width: 96px; height: 96px; border-radius: 20px; image-rendering: pixelated; box-shadow: 0 0 0 2px var(--edge-dark); }
 .dl-lead { margin: 0; font-size: 17px; color: var(--text); }
 .dl-card .btn { align-self: stretch; }
+a.btn { text-decoration: none; text-align: center; box-sizing: border-box; }
+a.btn[hidden] { display: none; }
 .menu-hero { display: flex; gap: 12px; align-items: center; }
 #menu-portrait { width: 56px; height: 56px; image-rendering: pixelated; background: #1b1530; border-radius: 4px; box-shadow: 0 0 0 2px var(--edge-dark); flex: none; }
 .menu-hero-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -367,6 +369,8 @@ button, .nav, .wpick, .node { -webkit-user-select: none; user-select: none; -web
     <div class="title-card px dl-card">
       <img src="icons/icon-192.png" alt="" class="dl-icon" width="96" height="96">
       <p class="dl-lead">Get the app. It lives on your home screen, plays offline and updates itself with one tap.</p>
+      <a id="dl-apk" class="btn" href="https://github.com/mRamos-14/script-and-sorcery/releases/latest/download/Script-and-Sorcery.apk" hidden>Download the app (APK)</a>
+      <p id="dl-apk-info" class="small install-hint" hidden></p>
       <p id="dl-note" class="small install-hint" hidden></p>
       <button id="dl-chrome" class="btn" hidden>Open in Chrome</button>
       <button id="dl-install" class="btn">Download the app</button>

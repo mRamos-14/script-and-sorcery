@@ -1,0 +1,12 @@
+{
+  "appId": "io.github.mramos14.sorcery",
+  "appName": "Script & Sorcery",
+  "webDir": "www",
+  "server": {
+    "url": "https://mramos-14.github.io/script-and-sorcery/?app=android",
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#15111f"
+  }
+}

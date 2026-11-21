@@ -2185,7 +2185,8 @@
   // what to do when it is not (inside another app's browser, iPhone, already installed).
   // The shared link opens a download page; the game itself starts straight away only inside
   // the installed app, or after "Play in the browser instead" (remembered for this tab).
-  const installedApp = window.matchMedia('(display-mode: standalone)').matches || !!navigator.standalone;
+  // the Android APK (Capacitor) opens the live page with ?app=android: it counts as installed
+  const installedApp = window.matchMedia('(display-mode: standalone)').matches || !!navigator.standalone || !!window.Capacitor || /[?&]app=android\b/.test(location.search);
   let playInBrowser = /[?&]play\b/.test(location.search);
   try { playInBrowser = playInBrowser || sessionStorage.getItem('sorcery-play') === '1'; } catch (e) { /* private mode */ }
   const startScreen = () => (hosted && !installedApp && !playInBrowser ? 'download' : 'title');
@@ -2224,15 +2225,30 @@
     // On Android only Chrome turns the install into a real app (a WebAPK). Other browsers and
     // in-app browsers can only add a shortcut, which shows their logo on the icon, so steer to Chrome.
     const otherBrowser = () => (navigator.brave ? 'Brave' : /SamsungBrowser/.test(ua) ? 'Samsung Internet' : /EdgA\//.test(ua) ? 'Edge' : /OPR\/|OPT\//.test(ua) ? 'Opera' : /Firefox\//.test(ua) ? 'Firefox' : /DuckDuckGo/.test(ua) ? 'DuckDuckGo' : null);
+    // On Android the APK (built by .github/workflows/android.yml into the "android" release)
+    // leads, as soon as the release really has it; otherwise the browser install leads.
+    let apk = null;
     const renderDownload = () => {
+      const android = /Android/.test(navigator.userAgent);
+      const useApk = android && !!apk;
       const where = inApp ? 'another app\'s browser' : otherBrowser();
-      const steer = /Android/.test(navigator.userAgent) && !!where;
+      const steer = android && !!where && !useApk;
+      $('#dl-apk').hidden = !useApk;
+      $('#dl-apk-info').hidden = !useApk;
+      if (useApk) $('#dl-apk-info').textContent = `Script-and-Sorcery.apk · ${(apk.size / 1048576).toFixed(1)} MB. Open it when it finishes downloading and allow your browser to install apps if asked. New levels arrive by themselves. The app keeps its own save: move progress with Back up save and Restore save in Settings.`;
       $('#dl-chrome').hidden = !steer;
       $('#dl-note').hidden = !steer;
       if (steer) $('#dl-note').textContent = `You opened this in ${where}. Only Chrome installs it as a real app, without a browser logo on the icon.`;
-      $('#dl-install').classList.toggle('ghost', steer);
-      $('#dl-install').textContent = steer ? 'Install here anyway (shortcut)' : 'Download the app';
+      $('#dl-install').classList.toggle('ghost', steer || useApk);
+      $('#dl-install').textContent = useApk ? (where ? 'Or add a browser shortcut' : 'Or install from Chrome') : steer ? 'Install here anyway (shortcut)' : 'Download the app';
     };
+    if (/Android/.test(navigator.userAgent)) {
+      fetch('https://api.github.com/repos/mRamos-14/script-and-sorcery/releases/tags/android')
+        .then(r => (r.ok ? r.json() : null))
+        .then(rel => { const a = rel && (rel.assets || []).find(x => x.name === 'Script-and-Sorcery.apk'); if (a) { apk = { size: a.size }; renderDownload(); } })
+        .catch(() => { /* no APK yet, or offline: the browser install still works */ });
+    }
+    if (/[?&]debug/.test(location.search)) window.__fakeApk = size => { apk = { size }; renderDownload(); };
     $('#dl-chrome').onclick = () => {
       sfx('tap');
       location.href = `intent://${location.host}${location.pathname}#Intent;scheme=https;package=com.android.chrome;end`;
