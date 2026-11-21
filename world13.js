@@ -21,7 +21,7 @@ const WORLD13 = {
       steps: [
         { type: 'talk', who: 'warden', text: 'Welcome to the Trap Dungeon, {NAME}. I am Warden Gray. Down here everything breaks. A real mage reads the error and knows exactly what went wrong.' },
         { type: 'talk', who: 'warden', text: 'Every error has a type. NameError: unknown name. TypeError: wrong kind of value. ValueError: right kind, bad value. IndexError and KeyError: missing position or key. ZeroDivisionError: dividing by zero.' },
-        { type: 'predict', measure: 'errtype', vars: R => ({ c: ERR_CODE(R) }), text: 'Which error will this cause?', code: ['$c'], explain: 'Read what the line tries to do, and which part cannot work.' },
+        { type: 'predict', measure: 'errtype', vars: R => ({ c: ERR_CODE(R) }), text: 'Which error will this cause, if any?', code: ['$c'], explain: 'Read what the line tries to do, and which part (if any) cannot work.' },
         { type: 'predict', measure: 'errtype', vars: R => ({ c: ERR_CODE(R) }), text: 'And this one?', code: ['$c'], explain: 'Match the problem to its error type.' },
         { type: 'predict', measure: 'errtype', vars: R => ({ c: ERR_CODE(R) }), text: 'One more. Which error, if any?', code: ['$c'], explain: 'Sometimes the trap is not a trap at all.' },
         {

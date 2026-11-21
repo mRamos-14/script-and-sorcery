@@ -14,7 +14,7 @@ const ERRS = /\b([A-Z][a-zA-Z]*(?:Error|Exception)|StopIteration|KeyboardInterru
 const out = [];
 let total = 0;
 for (const w of WORLDS) for (const lv of w.levels) {
-  for (let seed = 1; seed <= 3; seed++) {
+  for (let seed = 1; seed <= (+process.env.SEEDS || 3); seed++) {
     const R = Engine.makeR(seed * 7919 + lv.id.length);
     let foe = null;
     try { foe = lv.foe ? (typeof lv.foe === 'function' ? lv.foe(R) : { ...lv.foe }) : null; } catch (e) { /* */ }

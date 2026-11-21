@@ -612,7 +612,7 @@ const Arena = (() => {
     const right = r.error ? r.error.type : 'No error';
     const wrongs = shuffle(ERR_TYPES.filter(t => t !== right)).slice(0, 2);
     const choices = shuffle([right, ...wrongs]);
-    return { text: 'Which error will this cause?', code, choices, answer: choices.indexOf(right), explain: r.error ? `It raises ${r.error.type}: ${r.error.msg}` : 'It runs fine with no error.' };
+    return { text: 'Which error will this cause, if any?', code, choices, answer: choices.indexOf(right), explain: r.error ? `It raises ${r.error.type}: ${r.error.msg}` : 'It runs fine with no error.' };
   }
   // several level tags share a question pool
   const ALIAS = { accum: 'forloop', forstr: 'forloop', nested: 'forloop', sort: 'listmeth', listslice: 'lists', dictmod: 'dicts', get: 'dicts', dictcount: 'dictloop', dictnest: 'dicts', defaults: 'params', compose: 'return', errtypes: 'errors', multiexcept: 'tryexcept', finally: 'tryexcept', validate: 'tryexcept', with: 'files', append: 'filewrite' };

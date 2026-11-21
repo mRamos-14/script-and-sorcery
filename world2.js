@@ -373,7 +373,7 @@ const WORLD2 = {
           type: 'fix', vars: R => ({ a: R.int(3, 6), b: R.int(3, 6) }),
           text: 'This should strike with ($a + $b) × 2. Run it, then tap the broken line.',
           code: ['power = $a + $b * 2', 'print(power)', 'cast(spark, power)'], bad: 0,
-          options: ['power = ($a + $b) * 2', 'power = $a + ($b * 2)', 'power = $a * $b + 2'], answer: 0,
+          options: ['power = ($a + $b) * 2', 'power = $a + ($b * 2)', 'power = $a * $b * 2'], answer: 0,
           explain: 'Brackets make the adding happen first.',
         },
         { type: 'talk', who: 'goldgolem', text: 'TELL... ME... YOUR... POWER...' },
